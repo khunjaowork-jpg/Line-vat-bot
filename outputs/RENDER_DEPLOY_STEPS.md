@@ -32,10 +32,26 @@ LINE_CHANNEL_SECRET=your LINE channel secret
 LINE_CHANNEL_ACCESS_TOKEN=your LINE channel access token
 GOOGLE_APPS_SCRIPT_URL=https://script.google.com/macros/s/AKfycbzpbJYKNGnlNwgz2FL_7x8V_eVzRpSqc28ydqPTTxUe_T8QCeXzMxT-YB3qSrIRCxON/exec
 GOOGLE_APPS_SCRIPT_SECRET=KJao-VAT-Line-2026-Secret
+GOOGLE_VISION_API_KEY=your Google Vision API key
 VAT_RATE=0.07
 ```
 
 Do not add `PORT`; Render sets it automatically.
+
+## Optional: Use Google Vision OCR
+
+The bot uses Google Vision API first when `GOOGLE_VISION_API_KEY` is set. If the key is missing or Vision fails, it falls back to local Tesseract OCR.
+
+Google Cloud setup:
+
+1. Open Google Cloud Console.
+2. Select or create a project.
+3. Enable billing for the project.
+4. Enable `Cloud Vision API`.
+5. Go to `APIs & Services` > `Credentials`.
+6. Create an API key.
+7. Restrict the API key to `Cloud Vision API`.
+8. Add the key to Render as `GOOGLE_VISION_API_KEY`.
 
 ## 4. Deploy
 

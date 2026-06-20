@@ -45,6 +45,8 @@ def runtime_log(message: str) -> None:
 def load_config(path: Path) -> dict[str, Any]:
     with path.open("r", encoding="utf-8") as handle:
         config = json.load(handle)
+    if os.getenv("GOOGLE_VISION_API_KEY"):
+        config["google_vision_api_key"] = os.getenv("GOOGLE_VISION_API_KEY")
     if os.getenv("GOOGLE_APPS_SCRIPT_URL"):
         config["google_apps_script_url"] = os.getenv("GOOGLE_APPS_SCRIPT_URL")
     if os.getenv("GOOGLE_APPS_SCRIPT_SECRET"):
@@ -405,6 +407,18 @@ def apply_transaction_type_defaults(data: dict[str, Any], transaction_type: str)
 
 
 def ocr_image(image_path: Path) -> str:
+    vision_api_key = CONFIG.get("google_vision_api_key") or os.getenv(CONFIG.get("google_vision_api_key_env", "GOOGLE_VISION_API_KEY"))
+    if vision_api_key:
+        try:
+            runtime_log("Google Vision OCR started")
+            text = google_vision_ocr_image(image_path, vision_api_key)
+            runtime_log(f"Google Vision OCR completed characters={len(text)}")
+            if text.strip():
+                return text
+            runtime_log("Google Vision OCR returned empty text; falling back to Tesseract")
+        except Exception as exc:
+            runtime_log(f"Google Vision OCR failed: {exc}; falling back to Tesseract")
+
     try:
         from PIL import Image, ImageOps
         import pytesseract
@@ -433,6 +447,44 @@ def ocr_image(image_path: Path) -> str:
             fast_config = CONFIG.get("tesseract_fast_config", "--oem 1 --psm 11")
             fast_timeout = int(CONFIG.get("ocr_fast_timeout_seconds", 25))
             return pytesseract.image_to_string(image, lang="eng", config=fast_config, timeout=fast_timeout)
+
+
+def google_vision_ocr_image(image_path: Path, api_key: str) -> str:
+    image_content = base64.b64encode(image_path.read_bytes()).decode("ascii")
+    payload = {
+        "requests": [
+            {
+                "image": {"content": image_content},
+                "features": [{"type": "DOCUMENT_TEXT_DETECTION"}],
+                "imageContext": {"languageHints": ["th", "en"]},
+            }
+        ]
+    }
+    request = urllib.request.Request(
+        f"https://vision.googleapis.com/v1/images:annotate?key={api_key}",
+        data=json.dumps(payload).encode("utf-8"),
+        headers={"Content-Type": "application/json; charset=utf-8"},
+        method="POST",
+    )
+    timeout = int(CONFIG.get("google_vision_timeout_seconds", 45))
+    with urllib.request.urlopen(request, timeout=timeout) as response:
+        result = json.loads(response.read().decode("utf-8"))
+
+    if result.get("error"):
+        raise RuntimeError(result["error"].get("message", result["error"]))
+
+    responses = result.get("responses", [])
+    if not responses:
+        return ""
+    first = responses[0]
+    if first.get("error"):
+        raise RuntimeError(first["error"].get("message", first["error"]))
+    if first.get("fullTextAnnotation", {}).get("text"):
+        return first["fullTextAnnotation"]["text"]
+    annotations = first.get("textAnnotations") or []
+    if annotations:
+        return annotations[0].get("description", "")
+    return ""
 
 
 def next_empty_row(sheet, start_row: int = 4) -> int:
