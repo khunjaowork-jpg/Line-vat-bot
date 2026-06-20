@@ -425,7 +425,8 @@ def ocr_image(image_path: Path) -> str:
         image.thumbnail((int(CONFIG.get("ocr_max_dimension", 1600)), int(CONFIG.get("ocr_max_dimension", 1600))))
         image = ImageOps.autocontrast(image.convert("L"))
         tesseract_config = CONFIG.get("tesseract_config", "--oem 1 --psm 6")
-        return pytesseract.image_to_string(image, lang=lang, config=tesseract_config)
+        timeout = int(CONFIG.get("ocr_timeout_seconds", 25))
+        return pytesseract.image_to_string(image, lang=lang, config=tesseract_config, timeout=timeout)
 
 
 def next_empty_row(sheet, start_row: int = 4) -> int:
@@ -1178,8 +1179,20 @@ def process_line_event(event: dict[str, Any]) -> str | None:
     if not token:
         raise RuntimeError(f"Missing {CONFIG['line']['channel_access_token_env']}")
 
-    image_path = download_line_content(message["id"], token, resolve_path(CONFIG["image_archive_dir"]))
-    text = ocr_image(image_path)
+    try:
+        runtime_log("Downloading LINE image content")
+        image_path = download_line_content(message["id"], token, resolve_path(CONFIG["image_archive_dir"]))
+        runtime_log(f"Downloaded LINE image to {image_path}")
+        runtime_log("OCR started")
+        text = ocr_image(image_path)
+        runtime_log(f"OCR completed characters={len(text)}")
+    except Exception as exc:
+        runtime_log(f"OCR failed: {exc}")
+        return (
+            "OCR อ่านเอกสารไม่สำเร็จหรือใช้เวลานานเกินไปค่ะ\n"
+            "กรุณาถ่ายรูปใหม่ให้เห็นเฉพาะเอกสารเต็มหน้า ตัวหนังสือชัด และไม่เอียงมาก\n"
+            "จากนั้นส่งรูปเข้ามาอีกครั้งค่ะ"
+        )
     parsed = parse_receipt_text(text, float(CONFIG.get("vat_rate", 0.07)))
     sheet_name, row = append_expense_to_excel(image_path, parsed, "Imported", "Imported from LINE OCR", line_user_id)
     runtime_log(
@@ -1319,8 +1332,20 @@ def process_line_event_menu(event: dict[str, Any], public_base_url: str) -> str 
     if not token:
         raise RuntimeError(f"Missing {CONFIG['line']['channel_access_token_env']}")
 
-    image_path = download_line_content(message["id"], token, resolve_path(CONFIG["image_archive_dir"]))
-    text = ocr_image(image_path)
+    try:
+        runtime_log("Downloading LINE image content")
+        image_path = download_line_content(message["id"], token, resolve_path(CONFIG["image_archive_dir"]))
+        runtime_log(f"Downloaded LINE image to {image_path}")
+        runtime_log("OCR started")
+        text = ocr_image(image_path)
+        runtime_log(f"OCR completed characters={len(text)}")
+    except Exception as exc:
+        runtime_log(f"OCR failed: {exc}")
+        return (
+            "OCR อ่านเอกสารไม่สำเร็จหรือใช้เวลานานเกินไปค่ะ\n"
+            "กรุณาถ่ายรูปใหม่ให้เห็นเฉพาะเอกสารเต็มหน้า ตัวหนังสือชัด และไม่เอียงมาก\n"
+            "จากนั้นส่งรูปเข้ามาอีกครั้งค่ะ"
+        )
     parsed = parse_receipt_text(text, float(CONFIG.get("vat_rate", 0.07)))
     parsed = apply_transaction_type_defaults(parsed, state.get("transaction_type", "Expense"))
     set_user_state(
