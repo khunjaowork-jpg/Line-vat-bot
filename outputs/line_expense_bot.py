@@ -406,7 +406,7 @@ def apply_transaction_type_defaults(data: dict[str, Any], transaction_type: str)
 
 def ocr_image(image_path: Path) -> str:
     try:
-        from PIL import Image
+        from PIL import Image, ImageOps
         import pytesseract
     except ImportError as exc:
         raise RuntimeError("Install OCR packages first: pip install pillow pytesseract") from exc
@@ -421,7 +421,11 @@ def ocr_image(image_path: Path) -> str:
         tessdata_dir = resolve_path(CONFIG["tessdata_dir"])
         os.environ["TESSDATA_PREFIX"] = str(tessdata_dir)
     with Image.open(image_path) as image:
-        return pytesseract.image_to_string(image, lang=lang)
+        image = ImageOps.exif_transpose(image)
+        image.thumbnail((int(CONFIG.get("ocr_max_dimension", 1600)), int(CONFIG.get("ocr_max_dimension", 1600))))
+        image = ImageOps.autocontrast(image.convert("L"))
+        tesseract_config = CONFIG.get("tesseract_config", "--oem 1 --psm 6")
+        return pytesseract.image_to_string(image, lang=lang, config=tesseract_config)
 
 
 def next_empty_row(sheet, start_row: int = 4) -> int:
