@@ -424,9 +424,15 @@ def ocr_image(image_path: Path) -> str:
         image = ImageOps.exif_transpose(image)
         image.thumbnail((int(CONFIG.get("ocr_max_dimension", 1600)), int(CONFIG.get("ocr_max_dimension", 1600))))
         image = ImageOps.autocontrast(image.convert("L"))
-        tesseract_config = CONFIG.get("tesseract_config", "--oem 1 --psm 6")
+        tesseract_config = CONFIG.get("tesseract_config", "--oem 1 --psm 11")
         timeout = int(CONFIG.get("ocr_timeout_seconds", 25))
-        return pytesseract.image_to_string(image, lang=lang, config=tesseract_config, timeout=timeout)
+        try:
+            return pytesseract.image_to_string(image, lang=lang, config=tesseract_config, timeout=timeout)
+        except RuntimeError as exc:
+            runtime_log(f"OCR primary pass failed: {exc}; retrying fast eng pass")
+            fast_config = CONFIG.get("tesseract_fast_config", "--oem 1 --psm 11")
+            fast_timeout = int(CONFIG.get("ocr_fast_timeout_seconds", 25))
+            return pytesseract.image_to_string(image, lang="eng", config=fast_config, timeout=fast_timeout)
 
 
 def next_empty_row(sheet, start_row: int = 4) -> int:
