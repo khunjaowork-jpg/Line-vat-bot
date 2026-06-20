@@ -1119,21 +1119,29 @@ def build_google_sheet_payload(data: dict[str, Any], image_path: Path, line_user
     return {
         "secret": CONFIG.get("google_apps_script_secret", ""),
         "date": date_text,
+        "type": data.get("transaction_type", "Expense"),
         "transaction_type": data.get("transaction_type", "Expense"),
+        "invoiceNo": normalize_invoice_no(data.get("invoice_no")),
         "invoice_no": normalize_invoice_no(data.get("invoice_no")),
         "vendor": data.get("vendor", ""),
         "description": data.get("description", ""),
         "category": data.get("category", ""),
+        "beforeVat": before_vat,
         "before_vat": before_vat,
+        "vatRate": vat_rate,
         "vat_rate": vat_rate,
         "vat": vat,
         "total": total,
         "claimable": data.get("claimable", "Yes"),
         "month": month_text,
+        "imageUrl": image_url,
         "image_url": image_url,
         "confidence": data.get("confidence", ""),
+        "rawText": data.get("raw_text", ""),
         "raw_text": data.get("raw_text", ""),
+        "documentType": data.get("document_type", ""),
         "document_type": data.get("document_type", ""),
+        "lineUserId": line_user_id,
         "line_user_id": line_user_id,
         "message": message,
     }
@@ -1456,6 +1464,8 @@ def main() -> int:
     runtime_log(f"Startup workbook={workbook_path}")
     runtime_log(f"Startup {secret_name} set={bool(os.getenv(secret_name))}")
     runtime_log(f"Startup {token_name} set={bool(os.getenv(token_name))}")
+    runtime_log(f"Startup google_apps_script_url set={bool(CONFIG.get('google_apps_script_url'))}")
+    runtime_log(f"Startup google_apps_script_secret set={bool(CONFIG.get('google_apps_script_secret'))}")
 
     host = CONFIG.get("host", "0.0.0.0")
     port = int(CONFIG.get("port", 8080))
