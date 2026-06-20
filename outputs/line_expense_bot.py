@@ -640,6 +640,72 @@ def menu_text() -> str:
     )
 
 
+def blank_manual_entry(transaction_type: str) -> dict[str, Any]:
+    normalized_type = "Revenue" if str(transaction_type).lower() == "revenue" else "Expense"
+    category = CONFIG.get("default_revenue_category", "Sales") if normalized_type == "Revenue" else CONFIG.get("default_category", "Other")
+    return {
+        "transaction_type": normalized_type,
+        "document_type": "",
+        "date": dt.date.today(),
+        "invoice_no": "-",
+        "vendor": "",
+        "description": "Manual entry from LINE",
+        "category": category,
+        "before_vat": 0,
+        "vat": 0,
+        "total": 0,
+        "claimable": CONFIG.get("default_claimable", "Yes"),
+        "confidence": 0,
+        "raw_text": "",
+    }
+
+
+def manual_entry_form(data: dict[str, Any]) -> str:
+    return (
+        "OCR อ่านเอกสารไม่สำเร็จหรือใช้เวลานานเกินไปค่ะ\n"
+        "กรุณากรอกรายละเอียดตามแบบฟอร์มนี้ แล้วส่งกลับมาได้เลยค่ะ\n\n"
+        f"ประเภทเอกสาร: {data.get('document_type') or ''}\n"
+        f"วันที่: {data.get('date') or ''}\n"
+        f"เลขที่บิล: {normalize_invoice_no(data.get('invoice_no'))}\n"
+        f"ชื่อร้าน/คู่ค้า: {data.get('vendor') or ''}\n"
+        f"หมวด: {data.get('category') or ''}\n"
+        f"ยอดก่อน VAT: {float(data.get('before_vat') or 0):.2f}\n"
+        f"VAT: {float(data.get('vat') or 0):.2f}\n"
+        f"ยอดรวม: {float(data.get('total') or 0):.2f}"
+    )
+
+
+def confirmation_prompt(data: dict[str, Any]) -> str:
+    return (
+        format_parsed_details(data, "บิลนำเข้า") + "\n\n"
+        "กรุณาตรวจสอบข้อมูลก่อนบันทึกลง Google Sheet\n"
+        "ตอบ 1 = ยืนยันและบันทึก\n"
+        "ตอบ 2 = แก้ไขข้อมูล"
+    )
+
+
+def confirm_pending_to_google(line_user_id: str, state: dict[str, Any], public_base_url: str) -> str | list[dict[str, Any]]:
+    pending = deserialize_data(state["pending_data"])
+    image_path = Path(state.get("image_path", ""))
+    if not image_path.exists():
+        return "ไม่พบไฟล์รูปเอกสารเดิมค่ะ กรุณาส่งเอกสารใหม่อีกครั้ง"
+    try:
+        send_to_google_sheet(pending, image_path, line_user_id, public_base_url)
+    except Exception as exc:
+        runtime_log(f"Google Sheet save failed: {exc}")
+        return f"Google Sheet: ยังไม่สำเร็จ ({exc})\nข้อมูลยังไม่ถูกล้าง กรุณาลองตอบ 1 อีกครั้งหลังแก้ปัญหา"
+    clear_user_state(line_user_id)
+    summary_image = render_row_summary_image("Google Sheet", "-", pending, "บิลนำเข้า")
+    runtime_log(
+        f"Confirmed LINE receipt -> Google Sheet "
+        f"type={pending.get('transaction_type')} date={pending['date']} total={pending['total']}"
+    )
+    return [
+        text_message("บันทึกเรียบร้อย\nGoogle Sheet: บันทึกสำเร็จ"),
+        image_message(public_file_url(public_base_url, summary_image)),
+    ]
+
+
 def parse_correction_text(text: str, data: dict[str, Any]) -> dict[str, Any]:
     updated = dict(data)
     aliases = {
@@ -1254,6 +1320,17 @@ def process_line_event(event: dict[str, Any]) -> str | None:
         runtime_log(f"OCR completed characters={len(text)}")
     except Exception as exc:
         runtime_log(f"OCR failed: {exc}")
+        draft = blank_manual_entry("Expense")
+        set_user_state(
+            line_user_id,
+            {
+                "mode": "awaiting_correction",
+                "transaction_type": draft["transaction_type"],
+                "image_path": str(image_path) if "image_path" in locals() else "",
+                "pending_data": serialize_data(draft),
+            },
+        )
+        return manual_entry_form(draft)
         return (
             "OCR อ่านเอกสารไม่สำเร็จหรือใช้เวลานานเกินไปค่ะ\n"
             "กรุณาถ่ายรูปใหม่ให้เห็นเฉพาะเอกสารเต็มหน้า ตัวหนังสือชัด และไม่เอียงมาก\n"
@@ -1295,6 +1372,16 @@ def process_line_event_menu(event: dict[str, Any], public_base_url: str) -> str 
         if text in {"เมนู", "menu", "Menu", "MENU"}:
             clear_user_state(line_user_id)
             return menu_text()
+        if state.get("mode") == "awaiting_confirmation" and text in {"1", "ตรวจสอบและยืนยัน"}:
+            if not state.get("pending_data"):
+                return "ยังไม่มีบิลที่รอยืนยันค่ะ กรุณาเลือกเมนู บิลรายรับ หรือ บิลรายจ่าย ก่อน"
+            return confirm_pending_to_google(line_user_id, state, public_base_url)
+        if state.get("mode") == "awaiting_confirmation" and text in {"2", "แก้ไข"}:
+            if not state.get("pending_data"):
+                return "ยังไม่มีบิลที่รอแก้ไขค่ะ"
+            state["mode"] = "awaiting_correction"
+            set_user_state(line_user_id, state)
+            return manual_entry_form(deserialize_data(state.get("pending_data", {})))
         if text in {"1", "บิลรายรับ"}:
             set_user_state(line_user_id, {"mode": "awaiting_image", "transaction_type": "Revenue"})
             return "ส่งเอกสารเพื่อลงรายละเอียดในระบบได้เลยค่ะ"
@@ -1407,6 +1494,17 @@ def process_line_event_menu(event: dict[str, Any], public_base_url: str) -> str 
         runtime_log(f"OCR completed characters={len(text)}")
     except Exception as exc:
         runtime_log(f"OCR failed: {exc}")
+        draft = blank_manual_entry(state.get("transaction_type", "Expense"))
+        set_user_state(
+            line_user_id,
+            {
+                "mode": "awaiting_correction",
+                "transaction_type": draft["transaction_type"],
+                "image_path": str(image_path) if "image_path" in locals() else "",
+                "pending_data": serialize_data(draft),
+            },
+        )
+        return manual_entry_form(draft)
         return (
             "OCR อ่านเอกสารไม่สำเร็จหรือใช้เวลานานเกินไปค่ะ\n"
             "กรุณาถ่ายรูปใหม่ให้เห็นเฉพาะเอกสารเต็มหน้า ตัวหนังสือชัด และไม่เอียงมาก\n"
