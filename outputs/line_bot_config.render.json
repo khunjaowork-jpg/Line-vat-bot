@@ -1,0 +1,21 @@
+{
+  "workbook": "outputs/thai_vat_monthly_tracker_line_active.xlsx",
+  "image_archive_dir": "outputs/line_uploaded_receipts",
+  "state_file": "outputs/line_bot_state.json",
+  "reply_image_dir": "outputs/line_reply_images",
+  "host": "0.0.0.0",
+  "port": 8080,
+  "tesseract_lang": "tha+eng",
+  "tesseract_cmd": "tesseract",
+  "vat_rate": 0.07,
+  "default_category": "Other",
+  "default_revenue_category": "Sales",
+  "default_claimable": "Yes",
+  "google_apps_script_url": "https://script.google.com/macros/s/AKfycbzpbJYKNGnlNwgz2FL_7x8V_eVzRpSqc28ydqPTTxUe_T8QCeXzMxT-YB3qSrIRCxON/exec",
+  "google_apps_script_secret": "KJao-VAT-Line-2026-Secret",
+  "line": {
+    "channel_secret_env": "LINE_CHANNEL_SECRET",
+    "channel_access_token_env": "LINE_CHANNEL_ACCESS_TOKEN",
+    "reply_enabled": true
+  }
+}
