@@ -897,6 +897,11 @@ def find_font(size: int):
         r"C:\Windows\Fonts\tahoma.ttf",
         r"C:\Windows\Fonts\arial.ttf",
         r"C:\Windows\Fonts\segoeui.ttf",
+        "/usr/share/fonts/truetype/tlwg/Garuda.ttf",
+        "/usr/share/fonts/truetype/tlwg/Garuda-Bold.ttf",
+        "/usr/share/fonts/truetype/tlwg/Loma.ttf",
+        "/usr/share/fonts/truetype/tlwg/Loma-Bold.ttf",
+        "/usr/share/fonts/truetype/tlwg/TlwgTypist.ttf",
         "/usr/share/fonts/truetype/noto/NotoSansThaiLooped-Regular.ttf",
         "/usr/share/fonts/truetype/noto/NotoSansThaiLoopedUI-Regular.ttf",
         "/usr/share/fonts/truetype/noto/NotoSansThai-Regular.ttf",
@@ -904,9 +909,6 @@ def find_font(size: int):
         "/usr/share/fonts/opentype/noto/NotoSansThai-Regular.ttf",
         "/usr/share/fonts/opentype/noto/NotoSansThaiUI-Regular.ttf",
         "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
-        "/usr/share/fonts/truetype/tlwg/Garuda.ttf",
-        "/usr/share/fonts/truetype/tlwg/Loma.ttf",
-        "/usr/share/fonts/truetype/tlwg/TlwgTypist.ttf",
     ]
     for candidate in candidates:
         if Path(candidate).exists():
