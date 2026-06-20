@@ -413,7 +413,10 @@ def ocr_image(image_path: Path) -> str:
 
     lang = CONFIG.get("tesseract_lang", "tha+eng")
     if CONFIG.get("tesseract_cmd"):
-        pytesseract.pytesseract.tesseract_cmd = str(resolve_path(CONFIG["tesseract_cmd"]))
+        tesseract_cmd = str(CONFIG["tesseract_cmd"])
+        if Path(tesseract_cmd).is_absolute() or "/" in tesseract_cmd or "\\" in tesseract_cmd:
+            tesseract_cmd = str(resolve_path(tesseract_cmd))
+        pytesseract.pytesseract.tesseract_cmd = tesseract_cmd
     if CONFIG.get("tessdata_dir"):
         tessdata_dir = resolve_path(CONFIG["tessdata_dir"])
         os.environ["TESSDATA_PREFIX"] = str(tessdata_dir)
