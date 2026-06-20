@@ -415,9 +415,9 @@ def ocr_image(image_path: Path) -> str:
             runtime_log(f"Google Vision OCR completed characters={len(text)}")
             if text.strip():
                 return text
-            runtime_log("Google Vision OCR returned empty text; falling back to Tesseract")
+            raise RuntimeError("Google Vision OCR returned empty text")
         except Exception as exc:
-            runtime_log(f"Google Vision OCR failed: {exc}; falling back to Tesseract")
+            raise RuntimeError(f"Google Vision OCR failed within time limit: {exc}") from exc
 
     try:
         from PIL import Image, ImageOps
@@ -443,10 +443,7 @@ def ocr_image(image_path: Path) -> str:
         try:
             return pytesseract.image_to_string(image, lang=lang, config=tesseract_config, timeout=timeout)
         except RuntimeError as exc:
-            runtime_log(f"OCR primary pass failed: {exc}; retrying fast eng pass")
-            fast_config = CONFIG.get("tesseract_fast_config", "--oem 1 --psm 11")
-            fast_timeout = int(CONFIG.get("ocr_fast_timeout_seconds", 25))
-            return pytesseract.image_to_string(image, lang="eng", config=fast_config, timeout=fast_timeout)
+            raise RuntimeError(f"Tesseract OCR failed within time limit: {exc}") from exc
 
 
 def google_vision_ocr_image(image_path: Path, api_key: str) -> str:
