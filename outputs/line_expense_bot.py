@@ -897,17 +897,46 @@ def find_font(size: int):
         r"C:\Windows\Fonts\tahoma.ttf",
         r"C:\Windows\Fonts\arial.ttf",
         r"C:\Windows\Fonts\segoeui.ttf",
+        "/usr/share/fonts/truetype/noto/NotoSansThaiLooped-Regular.ttf",
+        "/usr/share/fonts/truetype/noto/NotoSansThaiLoopedUI-Regular.ttf",
         "/usr/share/fonts/truetype/noto/NotoSansThai-Regular.ttf",
         "/usr/share/fonts/truetype/noto/NotoSansThaiUI-Regular.ttf",
+        "/usr/share/fonts/opentype/noto/NotoSansThai-Regular.ttf",
+        "/usr/share/fonts/opentype/noto/NotoSansThaiUI-Regular.ttf",
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
         "/usr/share/fonts/truetype/tlwg/Garuda.ttf",
         "/usr/share/fonts/truetype/tlwg/Loma.ttf",
         "/usr/share/fonts/truetype/tlwg/TlwgTypist.ttf",
-        "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
     ]
     for candidate in candidates:
         if Path(candidate).exists():
             return ImageFont.truetype(candidate, size)
+    for root in (Path("/usr/share/fonts/truetype/noto"), Path("/usr/share/fonts/opentype/noto")):
+        if root.exists():
+            for pattern in ("NotoSansThai*.ttf", "NotoSansThai*.otf", "NotoSerifThai*.ttf", "NotoSerifThai*.otf"):
+                for candidate in sorted(root.glob(pattern)):
+                    return ImageFont.truetype(candidate, size)
     return ImageFont.load_default()
+
+
+def wrap_text(text: str, max_chars: int) -> list[str]:
+    text = str(text or "-")
+    if len(text) <= max_chars:
+        return [text]
+    lines: list[str] = []
+    current = ""
+    for part in text.split():
+        if len(current) + len(part) + 1 <= max_chars:
+            current = f"{current} {part}".strip()
+        else:
+            if current:
+                lines.append(current)
+            current = part
+    if current:
+        lines.append(current)
+    if not lines:
+        lines = [text[i:i + max_chars] for i in range(0, len(text), max_chars)]
+    return lines[:3]
 
 
 def render_row_summary_image(sheet_name: str, row: int, data: dict[str, Any], heading: str) -> Path:
@@ -916,7 +945,7 @@ def render_row_summary_image(sheet_name: str, row: int, data: dict[str, Any], he
     out_dir = reply_image_dir()
     out_dir.mkdir(parents=True, exist_ok=True)
     path = out_dir / f"excel_row_{row}_{uuid.uuid4().hex[:8]}.png"
-    width, height = 1100, 760
+    width, height = 1280, 980
     image = Image.new("RGB", (width, height), "#F8FAFC")
     draw = ImageDraw.Draw(image)
     title_font = find_font(36)
@@ -927,7 +956,7 @@ def render_row_summary_image(sheet_name: str, row: int, data: dict[str, Any], he
     accent = "#BBF7D0" if data.get("transaction_type") == "Revenue" else "#FECACA"
     draw.rounded_rectangle((28, 28, width - 28, 120), radius=22, fill=accent)
     draw.text((58, 52), heading, fill="#111827", font=title_font)
-    draw.text((width - 300, 62), f"{sheet_name}!Row {row}", fill="#374151", font=small_font)
+    draw.text((width - 440, 62), f"{sheet_name}!Row {row}", fill="#374151", font=small_font)
 
     fields = [
         ("ประเภท", data.get("transaction_type", "-")),
@@ -943,10 +972,15 @@ def render_row_summary_image(sheet_name: str, row: int, data: dict[str, Any], he
     ]
     y = 155
     for label, value in fields:
-        draw.rounded_rectangle((42, y - 8, width - 42, y + 48), radius=10, fill="#FFFFFF", outline="#E5E7EB")
+        wrapped_value = wrap_text(str(value), 54)
+        box_height = max(58, 30 + (len(wrapped_value) * 28))
+        draw.rounded_rectangle((42, y - 8, width - 42, y + box_height), radius=10, fill="#FFFFFF", outline="#E5E7EB")
         draw.text((70, y), label, fill="#475569", font=label_font)
-        draw.text((345, y), str(value)[:58], fill="#111827", font=value_font)
-        y += 62
+        line_y = y
+        for value_line in wrapped_value:
+            draw.text((395, line_y), value_line, fill="#111827", font=value_font)
+            line_y += 28
+        y += box_height + 8
     image.save(path, quality=92)
     return path
 

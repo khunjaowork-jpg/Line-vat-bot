@@ -10,6 +10,9 @@ RUN apt-get update \
         tesseract-ocr-tha \
         fonts-thai-tlwg \
         fonts-noto-core \
+        fonts-noto-extra \
+        fonts-noto-ui-core \
+        fonts-dejavu-core \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
