@@ -1405,6 +1405,7 @@ def format_google_sheet_matches(matches: list[dict[str, Any]], heading: str) -> 
             f"Row {item.get('row')}: {item.get('date') or '-'} | "
             f"{item.get('type') or '-'} | {item.get('vendor') or '-'} | "
             f"เลขที่บิล {item.get('invoiceNo') or '-'} | "
+            f"ก่อน VAT {float(item.get('beforeVat') or 0):,.2f} | "
             f"ยอดรวม {float(item.get('total') or 0):,.2f} | "
             f"เอกสาร {item.get('documentType') or '-'}"
         )
@@ -1515,7 +1516,7 @@ def process_line_event_menu(event: dict[str, Any], public_base_url: str) -> str 
         if state.get("mode") == "awaiting_cancel_total":
             amount = normalize_amount(text)
             if amount is None:
-                return "กรุณาพิมพ์ยอดรวมที่ต้องการยกเลิก เช่น 2251.72"
+                return "กรุณาพิมพ์ยอดรวมสุทธิหรือยอดก่อน VAT ที่ต้องการยกเลิก เช่น 2251.72"
             try:
                 matches = search_google_sheet_by_total(amount)
             except Exception as exc:
@@ -1524,7 +1525,7 @@ def process_line_event_menu(event: dict[str, Any], public_base_url: str) -> str 
                 return f"ค้นหารายการไม่สำเร็จค่ะ ({exc})"
             if not matches:
                 clear_user_state(line_user_id)
-                return f"ไม่พบรายการที่มียอดรวม {amount:,.2f} ค่ะ"
+                return f"ไม่พบรายการที่มียอด {amount:,.2f} ค่ะ กรุณาตรวจสอบว่ายอดนี้ตรงกับยอดรวมสุทธิหรือยอดก่อน VAT ใน Google Sheet"
             if len(matches) == 1:
                 state["mode"] = "awaiting_cancel_confirm"
                 state["cancel_row"] = int(matches[0]["row"])
@@ -1623,7 +1624,7 @@ def process_line_event_menu(event: dict[str, Any], public_base_url: str) -> str 
             return "กรุณาพิมพ์เลขที่บิล ชื่อร้าน/คู่ค้า หรือยอดรวมที่ต้องการตรวจสอบค่ะ"
         if text in {"4", "ยกเลิกการทำรายการ"}:
             set_user_state(line_user_id, {"mode": "awaiting_cancel_total"})
-            return "กรุณาพิมพ์ยอดรวมของรายการที่ต้องการยกเลิกค่ะ เช่น 2251.72"
+            return "กรุณาพิมพ์ยอดรวมสุทธิหรือยอดก่อน VAT ของรายการที่ต้องการยกเลิกค่ะ เช่น 2251.72"
         if state.get("mode") == "awaiting_lookup_bill_no":
             row_match = re.match(r"^(?:row\s*)?(\d+)$", text, flags=re.IGNORECASE)
             if row_match and state.get("lookup_rows"):
