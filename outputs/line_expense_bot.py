@@ -1727,11 +1727,15 @@ def process_line_event(event: dict[str, Any]) -> str | None:
 
 def process_line_event_menu(event: dict[str, Any], public_base_url: str) -> str | dict[str, Any] | list[dict[str, Any]] | None:
     runtime_log(f"Received LINE event type={event.get('type')} message_type={event.get('message', {}).get('type')}")
+    line_user_id = event.get("source", {}).get("userId", "")
+    state = get_user_state(line_user_id)
+    if event.get("type") in {"follow", "join", "memberJoined"}:
+        if not state.get("mode"):
+            return menu_message()
+        return None
     if event.get("type") != "message":
         return None
     message = event.get("message", {})
-    line_user_id = event.get("source", {}).get("userId", "")
-    state = get_user_state(line_user_id)
 
     if message.get("type") == "text":
         text = str(message.get("text") or "").strip()
@@ -2012,10 +2016,13 @@ def process_line_event_menu(event: dict[str, Any], public_base_url: str) -> str 
         return menu_message()
 
     if message.get("type") not in {"image", "file"}:
-        return menu_text()
+        return menu_message() if not state.get("mode") else menu_text()
 
     if state.get("mode") != "awaiting_image":
-        return "กรุณาเลือกเมนูก่อนส่งรูปค่ะ\n\n" + menu_text()
+        return [
+            text_message("กรุณาเลือกเมนูก่อนส่งรูปค่ะ"),
+            menu_message(),
+        ]
 
     token = os.getenv(CONFIG["line"]["channel_access_token_env"])
     if not token:
