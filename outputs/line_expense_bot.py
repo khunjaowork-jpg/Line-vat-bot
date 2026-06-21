@@ -737,22 +737,41 @@ def confirm_pending_to_google(line_user_id: str, state: dict[str, Any], public_b
     image_path = Path(state.get("image_path", ""))
     if not image_path.exists():
         return "ไม่พบไฟล์รูปเอกสารเดิมค่ะ กรุณาส่งเอกสารใหม่อีกครั้ง"
+    result = None
     try:
-        send_to_google_sheet(pending, image_path, line_user_id, public_base_url)
+        result = send_to_google_sheet(pending, image_path, line_user_id, public_base_url)
     except Exception as exc:
         runtime_log(f"Google Sheet save failed: {exc}")
         clear_user_state(line_user_id)
         return abort_flow_message(f"Google Sheet: ยังไม่สำเร็จ ({exc})")
-    clear_user_state(line_user_id)
     summary_image = render_row_summary_image("Google Sheet", "-", pending, "บิลนำเข้า")
+    messages = [
+        text_message("บันทึกเรียบร้อย\nGoogle Sheet: บันทึกสำเร็จ"),
+        image_message(public_file_url(public_base_url, summary_image)),
+    ]
+    substitute_match_data = substitute_match_from_pending(pending, result)
+    if can_create_substitute_receipt(substitute_match_data):
+        set_user_state(
+            line_user_id,
+            {
+                "mode": "awaiting_substitute_receipt_decision",
+                "substitute_match": substitute_match_data,
+            },
+        )
+        messages.append(
+            text_message(
+                "รายการนี้เป็นบิล/บิลเงินสด ต้องการสร้างใบแทนหรือไม่คะ\n"
+                "ตอบ 1 = ต้องการ\n"
+                "ตอบ 2 = ไม่ต้องการ"
+            )
+        )
+    else:
+        clear_user_state(line_user_id)
     runtime_log(
         f"Confirmed LINE receipt -> Google Sheet "
         f"type={pending.get('transaction_type')} date={pending['date']} total={pending['total']}"
     )
-    return [
-        text_message("บันทึกเรียบร้อย\nGoogle Sheet: บันทึกสำเร็จ"),
-        image_message(public_file_url(public_base_url, summary_image)),
-    ]
+    return messages
 
 
 def parse_correction_text(text: str, data: dict[str, Any]) -> dict[str, Any]:
@@ -1176,14 +1195,25 @@ def render_substitute_receipt_image(data: dict[str, Any]) -> Path:
     return path
 
 
+def render_substitute_receipt_pdf(image_path: Path) -> Path:
+    from PIL import Image
+
+    pdf_path = image_path.with_suffix(".pdf")
+    with Image.open(image_path) as image:
+        image.convert("RGB").save(pdf_path, "PDF", resolution=150.0)
+    return pdf_path
+
+
 def substitute_receipt_messages(matches: list[dict[str, Any]], public_base_url: str) -> list[dict[str, Any]]:
     data = substitute_data_from_match(matches[0])
     image_path = render_substitute_receipt_image(data)
+    pdf_path = render_substitute_receipt_pdf(image_path)
     return [
         text_message(
             "สร้างใบรับรองแทนใบเสร็จรับเงินเรียบร้อย\n"
             f"อ้างอิง {data.get('sheet_name')} Row {data.get('row')}\n"
-            "โปรดตรวจสอบและให้ผู้มีอำนาจลงนามก่อนใช้เป็นเอกสารประกอบบัญชี"
+            "โปรดตรวจสอบและให้ผู้มีอำนาจลงนามก่อนใช้เป็นเอกสารประกอบบัญชี\n"
+            f"PDF สำหรับพิมพ์: {public_file_url(public_base_url, pdf_path)}"
         ),
         image_message(public_file_url(public_base_url, image_path)),
     ]
@@ -1662,6 +1692,18 @@ def process_line_event_menu(event: dict[str, Any], public_base_url: str) -> str 
         if text in {"เมนู", "menu", "Menu", "MENU"}:
             clear_user_state(line_user_id)
             return menu_text()
+        if state.get("mode") == "awaiting_substitute_receipt_decision":
+            if text == "1":
+                match = state.get("substitute_match")
+                if not isinstance(match, dict) or not can_create_substitute_receipt(match):
+                    clear_user_state(line_user_id)
+                    return "ไม่พบข้อมูลสำหรับสร้างใบแทนค่ะ กรุณาเริ่มรายการใหม่อีกครั้ง"
+                clear_user_state(line_user_id)
+                return substitute_receipt_messages([match], public_base_url)
+            if text == "2":
+                clear_user_state(line_user_id)
+                return "รับทราบค่ะ ไม่สร้างใบแทนสำหรับรายการนี้\nสามารถเริ่มทำรายการใหม่ได้เลยค่ะ"
+            return "กรุณาตอบ 1 = ต้องการสร้างใบแทน หรือ 2 = ไม่ต้องการค่ะ"
         if state.get("mode") == "awaiting_substitute_select":
             row_match = re.match(r"^(?:row\s*)?(\d+)$", text, flags=re.IGNORECASE)
             if not row_match:
