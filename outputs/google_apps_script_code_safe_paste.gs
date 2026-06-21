@@ -3,7 +3,7 @@ var TX = "Transactions_12M";
 var EX = "Expenses";
 var RV = "Revenue";
 var LOG = "Import_Log";
-var STOCK_SPREADSHEET_ID = "1vZrY_U8qsJBYSHRuQzrZQhqrojwHq30xQ-NRBk3d-hw";
+var STOCK_SPREADSHEET_ID = "1Wu3jj8iHu70DKecFuWTu6_yf8T418GBv74Mz_zOtgWQ";
 var HEADERS = ["Date","Type","Invoice No","Vendor","Description","Category","Before VAT","VAT Rate","VAT","Total","Claimable","Month","Image URL","Confidence","Revenue Before VAT","Expense Before VAT","Raw Text","Document Type","LINE User ID","Submitter Name","Saved At"];
 
 function doGet() {

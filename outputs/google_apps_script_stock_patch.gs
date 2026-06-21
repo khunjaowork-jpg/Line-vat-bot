@@ -1,5 +1,5 @@
 // 1) Add this near the top of Code.gs after var LOG = "Import_Log";
-var STOCK_SPREADSHEET_ID = "1vZrY_U8qsJBYSHRuQzrZQhqrojwHq30xQ-NRBk3d-hw";
+var STOCK_SPREADSHEET_ID = "1Wu3jj8iHu70DKecFuWTu6_yf8T418GBv74Mz_zOtgWQ";
 
 // 2) Add this inside doPost(e), after updateDocumentType action:
 // if (p.action === "searchStock") {
