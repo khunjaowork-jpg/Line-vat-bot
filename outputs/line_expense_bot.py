@@ -238,6 +238,28 @@ def quick_reply_text_message(text: str, buttons: list[tuple[str, str]]) -> dict[
     return message
 
 
+def buttons_template_message(text: str, buttons: list[tuple[str, str]], title: str | None = None) -> dict[str, Any]:
+    template: dict[str, Any] = {
+        "type": "buttons",
+        "text": text[:160],
+        "actions": [
+            {
+                "type": "message",
+                "label": label[:20],
+                "text": value,
+            }
+            for label, value in buttons
+        ][:4],
+    }
+    if title:
+        template["title"] = title[:40]
+    return {
+        "type": "template",
+        "altText": text[:400],
+        "template": template,
+    }
+
+
 def image_message(public_url: str) -> dict[str, Any]:
     return {
         "type": "image",
@@ -675,19 +697,19 @@ def menu_text() -> str:
 
 
 def menu_message() -> dict[str, Any]:
-    return quick_reply_text_message(
+    return buttons_template_message(
         "กรุณาเลือกเมนู",
         [
-            ("1 บิลรายรับ", "1"),
-            ("2 บิลรายจ่าย", "2"),
-            ("3 เรียกดูบัญชี", "3"),
-            ("4 ยกเลิกรายการ", "4"),
+            ("1. บิลรายรับ", "1"),
+            ("2. บิลรายจ่าย", "2"),
+            ("3. เรียกดูบัญชี", "3"),
+            ("4. ยกเลิกรายการ", "4"),
         ],
     )
 
 
 def coming_soon_message(section: str) -> dict[str, Any]:
-    return quick_reply_text_message(
+    return buttons_template_message(
         f"หมวด {section}\n\n"
         "ระบบหมวดนี้ยังอยู่ระหว่างเตรียมใช้งานค่ะ\n"
         "ตอนนี้สามารถใช้งานหมวดบัญชีได้ก่อน",

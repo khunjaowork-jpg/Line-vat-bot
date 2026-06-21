@@ -112,6 +112,11 @@ def create_rich_menu_image(path: Path) -> None:
 
 
 def delete_existing_rich_menus(token: str) -> None:
+    try:
+        request_json("DELETE", DEFAULT_RICH_MENU_API, token)
+        print("Unlinked default rich menu from all users.")
+    except RuntimeError as exc:
+        print(f"Default rich menu unlink skipped: {exc}")
     result = request_json("GET", f"{RICH_MENU_API}/list", token)
     for item in result.get("richmenus", []):
         rich_menu_id = item.get("richMenuId")
@@ -146,6 +151,7 @@ def main() -> int:
     parser.add_argument("--image", default="outputs/line_rich_menu.png", help="Path to save generated rich menu PNG")
     parser.add_argument("--image-only", action="store_true", help="Only generate the rich menu PNG; do not call LINE API")
     parser.add_argument("--delete-existing", action="store_true", help="Delete existing rich menus before creating a new one")
+    parser.add_argument("--delete-only", action="store_true", help="Only remove existing rich menus and default rich menu")
     args = parser.parse_args()
 
     image_path = Path(args.image)
@@ -158,6 +164,11 @@ def main() -> int:
     if not args.token:
         print("Missing LINE channel access token. Set LINE_CHANNEL_ACCESS_TOKEN or pass --token.", file=sys.stderr)
         return 2
+
+    if args.delete_only:
+        delete_existing_rich_menus(args.token)
+        print("Rich menu removed. The bot will show vertical buttons only when a menu is needed.")
+        return 0
 
     if args.delete_existing:
         delete_existing_rich_menus(args.token)

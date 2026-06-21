@@ -6,6 +6,15 @@ LINE ไม่ส่ง webhook ตอนผู้ใช้แค่เปิด
 
 การ deploy บอทบน Render ยังไม่ทำให้ Rich Menu แสดงเอง ต้องรันสคริปต์นี้ 1 ครั้งเพื่อเรียก LINE API และตั้งค่า Rich Menu ให้ LINE OA
 
+ถ้าต้องการให้เมนูแสดงเฉพาะตอนบอทถามว่า `กรุณาเลือกเมนู` ไม่ต้องใช้ Rich Menu ถาวร ให้ลบ Rich Menu เดิมด้วยคำสั่งนี้:
+
+```powershell
+$env:LINE_CHANNEL_ACCESS_TOKEN="ใส่ Channel access token ของ LINE OA"
+python outputs\setup_line_rich_menu.py --delete-only
+```
+
+หลังจากลบแล้ว บอทจะแสดงเมนูเป็นปุ่มแนวตั้งเฉพาะตอนเริ่มงานหรือกด/พิมพ์ `บัญชี`
+
 ## วิธีรัน
 
 เปิด PowerShell ที่โฟลเดอร์โปรเจกต์ แล้วใส่ Channel access token ก่อน:
