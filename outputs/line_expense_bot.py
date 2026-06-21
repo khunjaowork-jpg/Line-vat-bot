@@ -656,6 +656,14 @@ def menu_text() -> str:
     )
 
 
+def abort_flow_message(reason: str) -> str:
+    return (
+        f"{reason}\n\n"
+        "ระบบหยุดงานรายการนี้ให้แล้วค่ะ สามารถเริ่มทำรายการใหม่ได้เลย\n\n"
+        + menu_text()
+    )
+
+
 def blank_manual_entry(transaction_type: str) -> dict[str, Any]:
     normalized_type = "Revenue" if str(transaction_type).lower() == "revenue" else "Expense"
     category = CONFIG.get("default_revenue_category", "Sales") if normalized_type == "Revenue" else CONFIG.get("default_category", "Other")
@@ -733,7 +741,8 @@ def confirm_pending_to_google(line_user_id: str, state: dict[str, Any], public_b
         send_to_google_sheet(pending, image_path, line_user_id, public_base_url)
     except Exception as exc:
         runtime_log(f"Google Sheet save failed: {exc}")
-        return f"Google Sheet: ยังไม่สำเร็จ ({exc})\nข้อมูลยังไม่ถูกล้าง กรุณาลองตอบ 1 อีกครั้งหลังแก้ปัญหา"
+        clear_user_state(line_user_id)
+        return abort_flow_message(f"Google Sheet: ยังไม่สำเร็จ ({exc})")
     clear_user_state(line_user_id)
     summary_image = render_row_summary_image("Google Sheet", "-", pending, "บิลนำเข้า")
     runtime_log(
@@ -1528,7 +1537,7 @@ def process_line_event_menu(event: dict[str, Any], public_base_url: str) -> str 
             except Exception as exc:
                 runtime_log(f"Cancel search failed: {exc}")
                 clear_user_state(line_user_id)
-                return f"ค้นหารายการไม่สำเร็จค่ะ ({exc})"
+                return abort_flow_message(f"ค้นหารายการไม่สำเร็จค่ะ ({exc})")
             if not matches:
                 clear_user_state(line_user_id)
                 return f"ไม่พบรายการที่มียอด {amount:,.2f} ค่ะ กรุณาตรวจสอบว่ายอดนี้ตรงกับยอดรวมสุทธิหรือยอดก่อน VAT ใน Google Sheet"
@@ -1562,7 +1571,8 @@ def process_line_event_menu(event: dict[str, Any], public_base_url: str) -> str 
                     delete_google_sheet_row(row, str(state.get("cancel_sheet") or ""))
                 except Exception as exc:
                     runtime_log(f"Cancel delete failed: {exc}")
-                    return f"ยกเลิกรายการไม่สำเร็จค่ะ ({exc})"
+                    clear_user_state(line_user_id)
+                    return abort_flow_message(f"ยกเลิกรายการไม่สำเร็จค่ะ ({exc})")
                 clear_user_state(line_user_id)
                 return "ยกเลิกบิลเรียบร้อย"
             if text == "2":
@@ -1609,7 +1619,8 @@ def process_line_event_menu(event: dict[str, Any], public_base_url: str) -> str 
                     update_google_sheet_document_type(row, document_type, sheet_name)
                 except Exception as exc:
                     runtime_log(f"Duplicate doc type update failed: {exc}")
-                    return f"แก้ไขประเภทเอกสารไม่สำเร็จค่ะ ({exc})"
+                    clear_user_state(line_user_id)
+                    return abort_flow_message(f"แก้ไขประเภทเอกสารไม่สำเร็จค่ะ ({exc})")
                 clear_user_state(line_user_id)
                 return "แก้ไขประเภทเอกสารเรียบร้อย"
             if text == "2":
@@ -1687,7 +1698,8 @@ def process_line_event_menu(event: dict[str, Any], public_base_url: str) -> str 
                 send_to_google_sheet(pending, image_path, line_user_id, public_base_url)
             except Exception as exc:
                 runtime_log(f"Google Sheet save failed: {exc}")
-                return f"Google Sheet: ยังไม่สำเร็จ ({exc})\nข้อมูลยังไม่ถูกล้าง กรุณาลองพิมพ์ ตรวจสอบและยืนยัน อีกครั้งหลังแก้ปัญหา"
+                clear_user_state(line_user_id)
+                return abort_flow_message(f"Google Sheet: ยังไม่สำเร็จ ({exc})")
             clear_user_state(line_user_id)
             summary_image = render_row_summary_image(sheet_name, row, pending, "บิลนำเข้า")
             runtime_log(
