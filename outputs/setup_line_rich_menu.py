@@ -14,6 +14,7 @@ from PIL import Image, ImageDraw, ImageFont
 
 RICH_MENU_API = "https://api.line.me/v2/bot/richmenu"
 RICH_MENU_DATA_API = "https://api-data.line.me/v2/bot/richmenu"
+DEFAULT_RICH_MENU_API = "https://api.line.me/v2/bot/user/all/richmenu"
 
 
 def request_json(method: str, url: str, token: str, payload: dict[str, Any] | None = None) -> dict[str, Any]:
@@ -135,7 +136,7 @@ def create_rich_menu(token: str, image_path: Path) -> str:
     result = request_json("POST", RICH_MENU_API, token, payload)
     rich_menu_id = result["richMenuId"]
     request_bytes("POST", f"{RICH_MENU_DATA_API}/{rich_menu_id}/content", token, "image/png", image_path.read_bytes())
-    request_json("POST", f"{RICH_MENU_API}/{rich_menu_id}/default", token)
+    request_json("POST", f"{DEFAULT_RICH_MENU_API}/{rich_menu_id}", token)
     return rich_menu_id
 
 
