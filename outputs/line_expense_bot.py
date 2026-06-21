@@ -1390,8 +1390,11 @@ def search_google_sheet_by_total(total: Any) -> list[dict[str, Any]]:
     return list(result.get("matches") or [])
 
 
-def delete_google_sheet_row(row: int) -> dict[str, Any]:
-    return google_sheet_action("deleteRow", row=int(row))
+def delete_google_sheet_row(row: int, sheet_name: str = "") -> dict[str, Any]:
+    payload: dict[str, Any] = {"row": int(row)}
+    if sheet_name:
+        payload["sheetName"] = sheet_name
+    return google_sheet_action("deleteRow", **payload)
 
 
 def update_google_sheet_document_type(row: int, document_type: str) -> dict[str, Any]:
@@ -1402,7 +1405,7 @@ def format_google_sheet_matches(matches: list[dict[str, Any]], heading: str) -> 
     lines = [heading]
     for item in matches[:10]:
         lines.append(
-            f"Row {item.get('row')}: {item.get('date') or '-'} | "
+            f"{item.get('sheetName') or 'Sheet'} Row {item.get('row')}: {item.get('date') or '-'} | "
             f"{item.get('type') or '-'} | {item.get('vendor') or '-'} | "
             f"เลขที่บิล {item.get('invoiceNo') or '-'} | "
             f"ก่อน VAT {float(item.get('beforeVat') or 0):,.2f} | "
@@ -1529,6 +1532,7 @@ def process_line_event_menu(event: dict[str, Any], public_base_url: str) -> str 
             if len(matches) == 1:
                 state["mode"] = "awaiting_cancel_confirm"
                 state["cancel_row"] = int(matches[0]["row"])
+                state["cancel_sheet"] = str(matches[0].get("sheetName") or "")
                 set_user_state(line_user_id, state)
                 return format_google_sheet_matches(matches, "พบรายการที่ต้องการยกเลิก") + "\n\nตอบ 1 = ยืนยันยกเลิก\nตอบ 2 = ไม่ยกเลิก"
             state["mode"] = "awaiting_cancel_select"
@@ -1545,13 +1549,14 @@ def process_line_event_menu(event: dict[str, Any], public_base_url: str) -> str 
                 return "ไม่พบ Row นี้จากรายการที่ค้นหา กรุณาพิมพ์ Row ใหม่ค่ะ"
             state["mode"] = "awaiting_cancel_confirm"
             state["cancel_row"] = wanted_row
+            state["cancel_sheet"] = str(matches[0].get("sheetName") or "")
             set_user_state(line_user_id, state)
             return format_google_sheet_matches(matches, "ยืนยันรายการที่ต้องการยกเลิก") + "\n\nตอบ 1 = ยืนยันยกเลิก\nตอบ 2 = ไม่ยกเลิก"
         if state.get("mode") == "awaiting_cancel_confirm":
             if text == "1":
                 row = int(state.get("cancel_row", 0))
                 try:
-                    delete_google_sheet_row(row)
+                    delete_google_sheet_row(row, str(state.get("cancel_sheet") or ""))
                 except Exception as exc:
                     runtime_log(f"Cancel delete failed: {exc}")
                     return f"ยกเลิกรายการไม่สำเร็จค่ะ ({exc})"
