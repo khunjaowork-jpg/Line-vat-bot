@@ -1046,7 +1046,37 @@ def render_row_summary_image(sheet_name: str, row: int, data: dict[str, Any], he
 
 def is_substitute_receipt_doc(document_type: Any) -> bool:
     normalized = re.sub(r"\s+", "", str(document_type or "").lower())
-    return normalized in {"บิล", "บิลเงินสด", "bill", "cashbill"}
+    return (
+        normalized in {"บิล", "บิลเงินสด", "bill", "cashbill"}
+        or "บิล" in normalized
+    )
+
+
+def can_create_substitute_receipt(item: dict[str, Any]) -> bool:
+    item_type = str(item.get("type") or "").lower()
+    return item_type == "expense" and (
+        is_substitute_receipt_doc(item.get("documentType"))
+        or not str(item.get("documentType") or "").strip()
+    )
+
+
+def substitute_match_from_pending(data: dict[str, Any], result: dict[str, Any] | None = None) -> dict[str, Any]:
+    result = result or {}
+    return {
+        "row": result.get("row") or "-",
+        "sheetName": result.get("sheetName") or result.get("sheet") or "Google Sheet",
+        "date": data.get("date") or "-",
+        "type": data.get("transaction_type") or data.get("type") or "Expense",
+        "invoiceNo": data.get("invoice_no") or data.get("invoiceNo") or "-",
+        "vendor": data.get("vendor") or "-",
+        "description": data.get("description") or "-",
+        "category": data.get("category") or "-",
+        "beforeVat": data.get("before_vat") or data.get("beforeVat") or 0,
+        "vat": data.get("vat") or 0,
+        "total": data.get("total") or 0,
+        "documentType": data.get("document_type") or data.get("documentType") or "-",
+        "submitterName": data.get("submitter_name") or data.get("submitterName") or "-",
+    }
 
 
 def substitute_data_from_match(item: dict[str, Any]) -> dict[str, Any]:
@@ -1653,11 +1683,11 @@ def process_line_event_menu(event: dict[str, Any], public_base_url: str) -> str 
                 runtime_log(f"Substitute receipt search failed: {exc}")
                 clear_user_state(line_user_id)
                 return abort_flow_message(f"ค้นหารายการเพื่อสร้างใบแทนไม่สำเร็จค่ะ ({exc})")
-            matches = [item for item in matches if is_substitute_receipt_doc(item.get("documentType"))]
+            matches = [item for item in matches if can_create_substitute_receipt(item)]
             if not matches:
                 return (
-                    f"ไม่พบรายการยอด {amount:,.2f} ที่เป็นประเภทเอกสาร บิล หรือ บิลเงินสดค่ะ\n"
-                    "หากต้องการแก้ประเภทเอกสารก่อน ให้ส่งเอกสารเดิมอีกครั้งหรือแก้ใน Google Sheet"
+                    f"ไม่พบรายการค่าใช้จ่ายยอด {amount:,.2f} ที่สามารถสร้างใบแทนได้ค่ะ\n"
+                    "ตรวจสอบว่ายอดตรงกับ Google Sheet หรือพิมพ์ยอดรวมสุทธิของรายการนั้นอีกครั้ง"
                 )
             if len(matches) == 1:
                 return substitute_receipt_messages(matches, public_base_url)
@@ -1840,22 +1870,27 @@ def process_line_event_menu(event: dict[str, Any], public_base_url: str) -> str 
                 return "ไม่พบไฟล์รูปเอกสารเดิมค่ะ กรุณาส่งเอกสารใหม่อีกครั้ง"
             sheet_name = "Google Sheet"
             row = "-"
+            result = None
             try:
-                send_to_google_sheet(pending, image_path, line_user_id, public_base_url)
+                result = send_to_google_sheet(pending, image_path, line_user_id, public_base_url)
             except Exception as exc:
                 runtime_log(f"Google Sheet save failed: {exc}")
                 clear_user_state(line_user_id)
                 return abort_flow_message(f"Google Sheet: ยังไม่สำเร็จ ({exc})")
             clear_user_state(line_user_id)
             summary_image = render_row_summary_image(sheet_name, row, pending, "บิลนำเข้า")
+            messages = [
+                text_message("บันทึกเรียบร้อย\nGoogle Sheet: บันทึกสำเร็จ"),
+                image_message(public_file_url(public_base_url, summary_image)),
+            ]
+            substitute_match_data = substitute_match_from_pending(pending, result)
+            if can_create_substitute_receipt(substitute_match_data):
+                messages.extend(substitute_receipt_messages([substitute_match_data], public_base_url))
             runtime_log(
                 f"Confirmed LINE receipt -> Google Sheet "
                 f"type={pending.get('transaction_type')} date={pending['date']} total={pending['total']}"
             )
-            return [
-                text_message("บันทึกเรียบร้อย\nGoogle Sheet: บันทึกสำเร็จ"),
-                image_message(public_file_url(public_base_url, summary_image)),
-            ]
+            return messages
         if text == "แก้ไข":
             if state.get("mode") != "awaiting_confirmation" or not state.get("pending_data"):
                 return "ยังไม่มีบิลที่รอแก้ไขค่ะ"
