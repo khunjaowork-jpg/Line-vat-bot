@@ -220,6 +220,24 @@ def text_message(text: str) -> dict[str, Any]:
     return {"type": "text", "text": text[:4900]}
 
 
+def quick_reply_text_message(text: str, buttons: list[tuple[str, str]]) -> dict[str, Any]:
+    message = text_message(text)
+    message["quickReply"] = {
+        "items": [
+            {
+                "type": "action",
+                "action": {
+                    "type": "message",
+                    "label": label[:20],
+                    "text": value,
+                },
+            }
+            for label, value in buttons
+        ][:13]
+    }
+    return message
+
+
 def image_message(public_url: str) -> dict[str, Any]:
     return {
         "type": "image",
@@ -656,6 +674,23 @@ def menu_text() -> str:
     )
 
 
+def menu_message() -> dict[str, Any]:
+    return quick_reply_text_message(
+        "กรุณาเลือกเมนูที่ต้องการค่ะ\n\n"
+        "1. บิลรายรับ\n"
+        "2. บิลรายจ่าย\n"
+        "3. เรียกดูรายละเอียดบัญชี\n"
+        "4. ยกเลิกการทำรายการ\n\n"
+        "กดปุ่มด้านล่าง หรือพิมพ์เลขเมนูได้เลยค่ะ",
+        [
+            ("1 บิลรายรับ", "1"),
+            ("2 บิลรายจ่าย", "2"),
+            ("3 เรียกดูบัญชี", "3"),
+            ("4 ยกเลิกรายการ", "4"),
+        ],
+    )
+
+
 def abort_flow_message(reason: str) -> str:
     return (
         f"{reason}\n\n"
@@ -701,12 +736,17 @@ def manual_entry_form(data: dict[str, Any]) -> str:
     )
 
 
-def confirmation_prompt(data: dict[str, Any]) -> str:
-    return (
+def confirmation_prompt(data: dict[str, Any]) -> dict[str, Any]:
+    return quick_reply_text_message(
         format_parsed_details(data, "บิลนำเข้า") + "\n\n"
-        "กรุณาตรวจสอบข้อมูลก่อนบันทึกลง Google Sheet\n"
-        "ตอบ 1 = ยืนยันและบันทึก\n"
-        "ตอบ 2 = แก้ไขข้อมูล"
+        "กรุณาตรวจสอบข้อมูลก่อนบันทึกลง Google Sheet ค่ะ\n"
+        "เลือกปุ่มด้านล่าง หรือพิมพ์เลขตอบกลับได้เลย\n\n"
+        "1 = ยืนยันและบันทึก\n"
+        "2 = แก้ไขข้อมูล",
+        [
+            ("✅ 1 ยืนยันบันทึก", "1"),
+            ("✏️ 2 แก้ไขข้อมูล", "2"),
+        ],
     )
 
 
@@ -759,10 +799,16 @@ def confirm_pending_to_google(line_user_id: str, state: dict[str, Any], public_b
             },
         )
         messages.append(
-            text_message(
-                "รายการนี้เป็นบิล/บิลเงินสด ต้องการสร้างใบแทนหรือไม่คะ\n"
-                "ตอบ 1 = ต้องการ\n"
-                "ตอบ 2 = ไม่ต้องการ"
+            quick_reply_text_message(
+                "บันทึกเป็นบิล/บิลเงินสดเรียบร้อยค่ะ\n\n"
+                "ต้องการสร้างใบแทนสำหรับพิมพ์เก็บเป็น hard copy ไหมคะ?\n"
+                "เลือกปุ่มด้านล่าง หรือพิมพ์เลขตอบกลับได้เลย\n\n"
+                "1 = ต้องการสร้างใบแทน\n"
+                "2 = ไม่ต้องการ",
+                [
+                    ("🧾 1 สร้างใบแทน", "1"),
+                    ("ไม่สร้างใบแทน", "2"),
+                ],
             )
         )
     else:
@@ -1679,7 +1725,7 @@ def process_line_event(event: dict[str, Any]) -> str | None:
     )
 
 
-def process_line_event_menu(event: dict[str, Any], public_base_url: str) -> str | list[dict[str, Any]] | None:
+def process_line_event_menu(event: dict[str, Any], public_base_url: str) -> str | dict[str, Any] | list[dict[str, Any]] | None:
     runtime_log(f"Received LINE event type={event.get('type')} message_type={event.get('message', {}).get('type')}")
     if event.get("type") != "message":
         return None
@@ -1691,7 +1737,7 @@ def process_line_event_menu(event: dict[str, Any], public_base_url: str) -> str 
         text = str(message.get("text") or "").strip()
         if text in {"เมนู", "menu", "Menu", "MENU"}:
             clear_user_state(line_user_id)
-            return menu_text()
+            return menu_message()
         if state.get("mode") == "awaiting_substitute_receipt_decision":
             if text == "1":
                 match = state.get("substitute_match")
@@ -1702,8 +1748,19 @@ def process_line_event_menu(event: dict[str, Any], public_base_url: str) -> str 
                 return substitute_receipt_messages([match], public_base_url)
             if text == "2":
                 clear_user_state(line_user_id)
-                return "รับทราบค่ะ ไม่สร้างใบแทนสำหรับรายการนี้\nสามารถเริ่มทำรายการใหม่ได้เลยค่ะ"
-            return "กรุณาตอบ 1 = ต้องการสร้างใบแทน หรือ 2 = ไม่ต้องการค่ะ"
+                return [
+                    text_message("รับทราบค่ะ ไม่สร้างใบแทนสำหรับรายการนี้\nสามารถเริ่มทำรายการใหม่ได้เลยค่ะ"),
+                    menu_message(),
+                ]
+            return quick_reply_text_message(
+                "กรุณาเลือกว่าต้องการสร้างใบแทนหรือไม่คะ\n\n"
+                "1 = ต้องการสร้างใบแทน\n"
+                "2 = ไม่ต้องการ",
+                [
+                    ("🧾 1 สร้างใบแทน", "1"),
+                    ("ไม่สร้างใบแทน", "2"),
+                ],
+            )
         if state.get("mode") == "awaiting_substitute_select":
             row_match = re.match(r"^(?:row\s*)?(\d+)$", text, flags=re.IGNORECASE)
             if not row_match:
@@ -1952,7 +2009,7 @@ def process_line_event_menu(event: dict[str, Any], public_base_url: str) -> str 
         delete_row_match = re.match(r"^delete\s+row\s+(\d+)$", text, flags=re.IGNORECASE)
         if delete_row_match:
             return delete_excel_row(delete_row_match.group(1), line_user_id)
-        return menu_text()
+        return menu_message()
 
     if message.get("type") not in {"image", "file"}:
         return menu_text()
@@ -2072,6 +2129,8 @@ class LineWebhookHandler(BaseHTTPRequestHandler):
                 if reply and event.get("replyToken"):
                     if isinstance(reply, list):
                         reply_messages(event["replyToken"], reply)
+                    elif isinstance(reply, dict):
+                        reply_messages(event["replyToken"], [reply])
                     else:
                         reply_text(event["replyToken"], reply)
             self._send_json(HTTPStatus.OK, {"status": "ok"})
