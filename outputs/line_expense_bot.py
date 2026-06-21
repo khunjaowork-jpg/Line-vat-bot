@@ -719,6 +719,30 @@ def coming_soon_message(section: str) -> dict[str, Any]:
     )
 
 
+def stock_menu_message() -> dict[str, Any]:
+    return buttons_template_message(
+        "กรุณาเลือกเมนูสต็อค",
+        [
+            ("1. นำเข้าสต็อค", "นำเข้าสต็อค"),
+            ("2. นำออกสต็อค", "นำออกสต็อค"),
+            ("3. เช็คสต็อค", "เช็คสต็อค"),
+            ("4. ค้นหาสินค้า", "ค้นหาสินค้า"),
+        ],
+    )
+
+
+def stock_branch_menu_message() -> dict[str, Any]:
+    return buttons_template_message(
+        "กรุณาเลือกสาขาที่ต้องการค้นหาสินค้า",
+        [
+            ("1. สี่แยก", "ค้นหาสินค้า:สี่แยก"),
+            ("2. พัสดุสี่แยก", "ค้นหาสินค้า:พัสดุสี่แยก"),
+            ("3. ทะเล", "ค้นหาสินค้า:ทะเล"),
+            ("4. เขาใหญ่", "ค้นหาสินค้า:เขาใหญ่"),
+        ],
+    )
+
+
 def abort_flow_message(reason: str) -> str:
     return (
         f"{reason}\n\n"
@@ -1772,7 +1796,41 @@ def process_line_event_menu(event: dict[str, Any], public_base_url: str) -> str 
             return menu_message()
         if text in {"สต็อค", "สต๊อค", "stock", "Stock", "STOCK"}:
             clear_user_state(line_user_id)
-            return coming_soon_message("สต็อค")
+            return stock_menu_message()
+        if text in {"นำเข้าสต็อค", "นำออกสต็อค", "เช็คสต็อค"}:
+            clear_user_state(line_user_id)
+            return buttons_template_message(
+                f"เมนู {text}\n\n"
+                "ระบบส่วนนี้กำลังเตรียมใช้งานค่ะ",
+                [
+                    ("กลับเมนูสต็อค", "สต็อค"),
+                    ("กลับเมนูบัญชี", "บัญชี"),
+                ],
+            )
+        if text == "ค้นหาสินค้า":
+            clear_user_state(line_user_id)
+            return stock_branch_menu_message()
+        stock_branch_match = re.match(r"^ค้นหาสินค้า:(.+)$", text)
+        if stock_branch_match:
+            branch = stock_branch_match.group(1).strip()
+            set_user_state(line_user_id, {"mode": "awaiting_stock_product_query", "stock_branch": branch})
+            return (
+                f"เลือกสาขา {branch} แล้วค่ะ\n"
+                "กรุณาพิมพ์ชื่อสินค้า หรือรหัสสินค้าที่ต้องการค้นหา"
+            )
+        if state.get("mode") == "awaiting_stock_product_query":
+            branch = state.get("stock_branch") or "-"
+            clear_user_state(line_user_id)
+            return buttons_template_message(
+                f"รับคำค้นสินค้าแล้วค่ะ\n"
+                f"สาขา: {branch}\n"
+                f"คำค้น: {text}\n\n"
+                "ระบบค้นหาสต็อคจริงกำลังเตรียมเชื่อมข้อมูลสินค้า",
+                [
+                    ("ค้นหาใหม่", "ค้นหาสินค้า"),
+                    ("กลับเมนูสต็อค", "สต็อค"),
+                ],
+            )
         if text in {"HR", "hr", "Hr", "ฝ่ายบุคคล"}:
             clear_user_state(line_user_id)
             return coming_soon_message("HR")
