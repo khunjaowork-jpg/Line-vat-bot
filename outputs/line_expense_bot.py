@@ -1672,6 +1672,40 @@ def search_google_sheet_by_total(total: Any) -> list[dict[str, Any]]:
     return list(result.get("matches") or [])
 
 
+def search_stock_product(branch: str, query: str) -> list[dict[str, Any]]:
+    result = google_sheet_action("searchStock", branch=branch, query=query)
+    return list(result.get("matches") or [])
+
+
+def format_stock_results(branch: str, query: str, matches: list[dict[str, Any]]) -> str:
+    if not matches:
+        return (
+            f"ไม่พบสินค้าในสาขา {branch}\n"
+            f"คำค้น: {query}\n\n"
+            "กรุณาตรวจสอบชื่อสินค้า/บาร์โค้ด/SKU แล้วค้นหาอีกครั้งค่ะ"
+        )
+    lines = [
+        f"พบสินค้าในสาขา {branch}",
+        f"คำค้น: {query}",
+        "",
+    ]
+    for idx, item in enumerate(matches[:10], 1):
+        qty = item.get("quantity")
+        qty_text = "-" if qty in (None, "") else str(qty)
+        lines.extend(
+            [
+                f"{idx}. {item.get('name') or '-'}",
+                f"หมวด: {item.get('category') or '-'}",
+                f"บาร์โค้ด: {item.get('barcode') or '-'} | SKU: {item.get('sku') or '-'}",
+                f"คงเหลือ: {qty_text} | ราคา: {item.get('price') or '-'}",
+                "",
+            ]
+        )
+    if len(matches) > 10:
+        lines.append(f"แสดง 10 รายการแรกจากทั้งหมด {len(matches)} รายการ")
+    return "\n".join(lines).strip()
+
+
 def delete_google_sheet_row(row: int, sheet_name: str = "") -> dict[str, Any]:
     payload: dict[str, Any] = {"row": int(row)}
     if sheet_name:
@@ -1820,17 +1854,23 @@ def process_line_event_menu(event: dict[str, Any], public_base_url: str) -> str 
             )
         if state.get("mode") == "awaiting_stock_product_query":
             branch = state.get("stock_branch") or "-"
+            try:
+                matches = search_stock_product(str(branch), text)
+            except Exception as exc:
+                runtime_log(f"Stock search failed: {exc}")
+                clear_user_state(line_user_id)
+                return abort_flow_message(f"ค้นหาสต็อคไม่สำเร็จค่ะ ({exc})")
             clear_user_state(line_user_id)
-            return buttons_template_message(
-                f"รับคำค้นสินค้าแล้วค่ะ\n"
-                f"สาขา: {branch}\n"
-                f"คำค้น: {text}\n\n"
-                "ระบบค้นหาสต็อคจริงกำลังเตรียมเชื่อมข้อมูลสินค้า",
-                [
-                    ("ค้นหาใหม่", "ค้นหาสินค้า"),
-                    ("กลับเมนูสต็อค", "สต็อค"),
-                ],
-            )
+            return [
+                text_message(format_stock_results(str(branch), text, matches)),
+                buttons_template_message(
+                    "ต้องการทำรายการต่อหรือไม่คะ",
+                    [
+                        ("ค้นหาใหม่", "ค้นหาสินค้า"),
+                        ("กลับเมนูสต็อค", "สต็อค"),
+                    ],
+                ),
+            ]
         if text in {"HR", "hr", "Hr", "ฝ่ายบุคคล"}:
             clear_user_state(line_user_id)
             return coming_soon_message("HR")

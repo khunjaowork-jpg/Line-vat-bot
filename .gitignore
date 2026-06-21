@@ -12,6 +12,8 @@ outputs/*
 !outputs/RENDER_DEPLOY_STEPS.md
 !outputs/setup_line_rich_menu.py
 !outputs/SETUP_LINE_RICH_MENU.md
+!outputs/google_apps_script_code_safe_paste.gs
+!outputs/google_apps_script_stock_patch.gs
 outputs/__pycache__/
 outputs/line_bot_runtime.log
 outputs/line_bot_state.json
