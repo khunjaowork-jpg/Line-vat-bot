@@ -1397,8 +1397,11 @@ def delete_google_sheet_row(row: int, sheet_name: str = "") -> dict[str, Any]:
     return google_sheet_action("deleteRow", **payload)
 
 
-def update_google_sheet_document_type(row: int, document_type: str) -> dict[str, Any]:
-    return google_sheet_action("updateDocumentType", row=int(row), documentType=document_type)
+def update_google_sheet_document_type(row: int, document_type: str, sheet_name: str = "") -> dict[str, Any]:
+    payload: dict[str, Any] = {"row": int(row), "documentType": document_type}
+    if sheet_name:
+        payload["sheetName"] = sheet_name
+    return google_sheet_action("updateDocumentType", **payload)
 
 
 def format_google_sheet_matches(matches: list[dict[str, Any]], heading: str) -> str:
@@ -1598,10 +1601,12 @@ def process_line_event_menu(event: dict[str, Any], public_base_url: str) -> str 
                 if not matches:
                     clear_user_state(line_user_id)
                     return "ไม่พบรายการเดิมสำหรับแก้ไขค่ะ"
-                row = int(matches[0]["row"])
+                target = matches[0]
+                row = int(target["row"])
+                sheet_name = str(target.get("sheetName") or "")
                 document_type = str(state.get("new_document_type") or "")
                 try:
-                    update_google_sheet_document_type(row, document_type)
+                    update_google_sheet_document_type(row, document_type, sheet_name)
                 except Exception as exc:
                     runtime_log(f"Duplicate doc type update failed: {exc}")
                     return f"แก้ไขประเภทเอกสารไม่สำเร็จค่ะ ({exc})"
