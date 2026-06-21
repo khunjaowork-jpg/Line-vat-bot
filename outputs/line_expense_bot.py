@@ -1044,6 +1044,121 @@ def render_row_summary_image(sheet_name: str, row: int, data: dict[str, Any], he
     return path
 
 
+def is_substitute_receipt_doc(document_type: Any) -> bool:
+    normalized = re.sub(r"\s+", "", str(document_type or "").lower())
+    return normalized in {"บิล", "บิลเงินสด", "bill", "cashbill"}
+
+
+def substitute_data_from_match(item: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "date": item.get("date") or "-",
+        "transaction_type": item.get("type") or "Expense",
+        "invoice_no": item.get("invoiceNo") or "-",
+        "vendor": item.get("vendor") or "-",
+        "description": item.get("description") or "ค่าใช้จ่ายตามบิล/บิลเงินสด",
+        "category": item.get("category") or "-",
+        "before_vat": float(item.get("beforeVat") or 0),
+        "vat": float(item.get("vat") or 0),
+        "total": float(item.get("total") or 0),
+        "document_type": item.get("documentType") or "-",
+        "submitter_name": item.get("submitterName") or "-",
+        "sheet_name": item.get("sheetName") or "-",
+        "row": item.get("row") or "-",
+    }
+
+
+def render_substitute_receipt_image(data: dict[str, Any]) -> Path:
+    from PIL import Image, ImageDraw
+
+    out_dir = reply_image_dir()
+    out_dir.mkdir(parents=True, exist_ok=True)
+    path = out_dir / f"substitute_receipt_{data.get('row', '-')}_{uuid.uuid4().hex[:8]}.png"
+    width, height = 1280, 1700
+    image = Image.new("RGB", (width, height), "#FFFFFF")
+    draw = ImageDraw.Draw(image)
+    title_font = find_font(42)
+    header_font = find_font(30)
+    label_font = find_font(25)
+    small_font = find_font(21)
+
+    draw.rectangle((38, 38, width - 38, height - 38), outline="#111827", width=3)
+    draw.text((width // 2 - 250, 70), "ใบรับรองแทนใบเสร็จรับเงิน", fill="#111827", font=title_font)
+    draw.text((width // 2 - 280, 125), "กรณีไม่มีใบเสร็จรับเงิน/ได้รับเพียงบิลหรือบิลเงินสด", fill="#374151", font=small_font)
+    draw.line((80, 175, width - 80, 175), fill="#111827", width=2)
+
+    y = 210
+    rows = [
+        ("วันที่จัดทำใบแทน", dt.date.today().isoformat()),
+        ("วันที่ตามเอกสาร/วันที่จ่าย", str(data.get("date") or "-")),
+        ("อ้างอิง Google Sheet", f"{data.get('sheet_name')} Row {data.get('row')}"),
+        ("ประเภทเอกสารเดิม", data.get("document_type") or "-"),
+        ("เลขที่บิล/เอกสาร", data.get("invoice_no") or "-"),
+        ("ชื่อร้าน/คู่ค้า/ผู้รับเงิน", data.get("vendor") or "-"),
+        ("หมวดค่าใช้จ่าย", data.get("category") or "-"),
+        ("รายละเอียดค่าใช้จ่าย", data.get("description") or "-"),
+        ("ผู้นำส่งเอกสาร", data.get("submitter_name") or "-"),
+    ]
+    for label, value in rows:
+        draw.text((85, y), label, fill="#374151", font=label_font)
+        wrapped = wrap_text(str(value), 48)
+        line_y = y
+        for line in wrapped:
+            draw.text((430, line_y), line, fill="#111827", font=label_font)
+            line_y += 32
+        y += max(48, len(wrapped) * 34)
+
+    y += 25
+    draw.rounded_rectangle((80, y, width - 80, y + 190), radius=12, fill="#F8FAFC", outline="#CBD5E1")
+    draw.text((110, y + 28), "ยอดก่อน VAT", fill="#374151", font=header_font)
+    draw.text((760, y + 28), f"{float(data.get('before_vat') or 0):,.2f} บาท", fill="#111827", font=header_font)
+    draw.text((110, y + 82), "VAT", fill="#374151", font=header_font)
+    draw.text((760, y + 82), f"{float(data.get('vat') or 0):,.2f} บาท", fill="#111827", font=header_font)
+    draw.text((110, y + 136), "ยอดรวม", fill="#111827", font=header_font)
+    draw.text((760, y + 136), f"{float(data.get('total') or 0):,.2f} บาท", fill="#111827", font=header_font)
+
+    y += 240
+    note_lines = [
+        "ข้าพเจ้าขอรับรองว่าได้จ่ายเงินตามรายการข้างต้นจริง และไม่สามารถเรียก/รับใบเสร็จรับเงิน",
+        "หรือเอกสารภาษีที่สมบูรณ์จากผู้รับเงินได้ จึงจัดทำใบรับรองแทนใบเสร็จรับเงินฉบับนี้",
+        "เพื่อใช้เป็นหลักฐานประกอบการบันทึกค่าใช้จ่าย โปรดแนบหลักฐานการจ่ายเงิน/รูปบิลเดิมทุกครั้ง",
+        "หมายเหตุ: กรณีใช้ยื่นภาษี ควรให้ผู้ทำบัญชีหรือที่ปรึกษาภาษีตรวจสอบความเหมาะสมก่อนยื่น",
+    ]
+    for line in note_lines:
+        draw.text((90, y), line, fill="#111827", font=small_font)
+        y += 34
+
+    y += 70
+    signature_blocks = [
+        ("ผู้จ่ายเงิน/ผู้ขอเบิก", data.get("submitter_name") or ""),
+        ("ผู้ตรวจสอบ/ผู้อนุมัติ", ""),
+        ("ผู้รับเงิน", data.get("vendor") or ""),
+    ]
+    block_width = 350
+    x_positions = [90, 465, 840]
+    for x, (label, name) in zip(x_positions, signature_blocks):
+        draw.line((x, y, x + block_width, y), fill="#111827", width=2)
+        draw.text((x + 45, y + 15), label, fill="#374151", font=small_font)
+        draw.text((x + 35, y + 48), f"({name or '________________'})", fill="#111827", font=small_font)
+        draw.text((x + 65, y + 82), "วันที่ ____/____/______", fill="#374151", font=small_font)
+
+    draw.text((90, height - 90), "เอกสารสร้างจากระบบ LINE VAT Bot และข้อมูลใน Google Sheet", fill="#64748B", font=small_font)
+    image.save(path, quality=94)
+    return path
+
+
+def substitute_receipt_messages(matches: list[dict[str, Any]], public_base_url: str) -> list[dict[str, Any]]:
+    data = substitute_data_from_match(matches[0])
+    image_path = render_substitute_receipt_image(data)
+    return [
+        text_message(
+            "สร้างใบรับรองแทนใบเสร็จรับเงินเรียบร้อย\n"
+            f"อ้างอิง {data.get('sheet_name')} Row {data.get('row')}\n"
+            "โปรดตรวจสอบและให้ผู้มีอำนาจลงนามก่อนใช้เป็นเอกสารประกอบบัญชี"
+        ),
+        image_message(public_file_url(public_base_url, image_path)),
+    ]
+
+
 def public_file_url(base_url: str, path: Path) -> str:
     return f"{base_url.rstrip('/')}/files/{path.name}"
 
@@ -1517,6 +1632,37 @@ def process_line_event_menu(event: dict[str, Any], public_base_url: str) -> str 
         if text in {"เมนู", "menu", "Menu", "MENU"}:
             clear_user_state(line_user_id)
             return menu_text()
+        if state.get("mode") == "awaiting_substitute_select":
+            row_match = re.match(r"^(?:row\s*)?(\d+)$", text, flags=re.IGNORECASE)
+            if not row_match:
+                return "กรุณาพิมพ์เลข Row ที่ต้องการสร้างใบแทน เช่น Row 12"
+            wanted_row = int(row_match.group(1))
+            matches = [item for item in state.get("substitute_matches", []) if int(item.get("row", 0)) == wanted_row]
+            if not matches:
+                return "ไม่พบ Row นี้จากรายการที่ค้นหา กรุณาพิมพ์ Row ใหม่ค่ะ"
+            clear_user_state(line_user_id)
+            return substitute_receipt_messages(matches, public_base_url)
+        substitute_match = re.match(r"^ใบแทน\s+(.+)$", text, flags=re.IGNORECASE)
+        if substitute_match:
+            amount = normalize_amount(substitute_match.group(1))
+            if amount is None:
+                return "กรุณาพิมพ์คำสั่ง เช่น ใบแทน 59 หรือ ใบแทน 12705.18"
+            try:
+                matches = search_google_sheet_by_total(amount)
+            except Exception as exc:
+                runtime_log(f"Substitute receipt search failed: {exc}")
+                clear_user_state(line_user_id)
+                return abort_flow_message(f"ค้นหารายการเพื่อสร้างใบแทนไม่สำเร็จค่ะ ({exc})")
+            matches = [item for item in matches if is_substitute_receipt_doc(item.get("documentType"))]
+            if not matches:
+                return (
+                    f"ไม่พบรายการยอด {amount:,.2f} ที่เป็นประเภทเอกสาร บิล หรือ บิลเงินสดค่ะ\n"
+                    "หากต้องการแก้ประเภทเอกสารก่อน ให้ส่งเอกสารเดิมอีกครั้งหรือแก้ใน Google Sheet"
+                )
+            if len(matches) == 1:
+                return substitute_receipt_messages(matches, public_base_url)
+            set_user_state(line_user_id, {"mode": "awaiting_substitute_select", "substitute_matches": matches[:10]})
+            return format_google_sheet_matches(matches, "พบหลายรายการที่สามารถสร้างใบแทนได้") + "\n\nกรุณาพิมพ์เลข Row ที่ต้องการสร้างใบแทน"
         if state.get("mode") == "awaiting_confirmation" and text in {"1", "ตรวจสอบและยืนยัน"}:
             if not state.get("pending_data"):
                 return "ยังไม่มีบิลที่รอยืนยันค่ะ กรุณาเลือกเมนู บิลรายรับ หรือ บิลรายจ่าย ก่อน"
