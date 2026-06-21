@@ -1690,14 +1690,11 @@ def format_stock_results(branch: str, query: str, matches: list[dict[str, Any]])
         "",
     ]
     for idx, item in enumerate(matches[:10], 1):
-        qty = item.get("quantity")
-        qty_text = "-" if qty in (None, "") else str(qty)
         lines.extend(
             [
-                f"{idx}. {item.get('name') or '-'}",
-                f"หมวด: {item.get('category') or '-'}",
-                f"บาร์โค้ด: {item.get('barcode') or '-'} | SKU: {item.get('sku') or '-'}",
-                f"คงเหลือ: {qty_text} | ราคา: {item.get('price') or '-'}",
+                f"{idx}. ชื่อสินค้า: {item.get('name') or '-'}",
+                f"ราคาสินค้า: {item.get('price') or '-'}",
+                f"บาร์โค้ด: {item.get('barcode') or '-'}",
                 "",
             ]
         )
