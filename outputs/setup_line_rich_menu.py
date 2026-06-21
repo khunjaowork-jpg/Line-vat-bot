@@ -4,6 +4,7 @@ import argparse
 import json
 import os
 import sys
+import urllib.error
 import urllib.request
 from pathlib import Path
 from typing import Any
@@ -21,17 +22,25 @@ def request_json(method: str, url: str, token: str, payload: dict[str, Any] | No
     req.add_header("Authorization", f"Bearer {token}")
     if payload is not None:
         req.add_header("Content-Type", "application/json")
-    with urllib.request.urlopen(req, timeout=30) as response:
-        body = response.read().decode("utf-8")
-        return json.loads(body) if body else {}
+    try:
+        with urllib.request.urlopen(req, timeout=30) as response:
+            body = response.read().decode("utf-8")
+            return json.loads(body) if body else {}
+    except urllib.error.HTTPError as exc:
+        body = exc.read().decode("utf-8", errors="replace")
+        raise RuntimeError(f"LINE API error {exc.code} {exc.reason}: {body}") from exc
 
 
 def request_bytes(method: str, url: str, token: str, content_type: str, data: bytes) -> None:
     req = urllib.request.Request(url, data=data, method=method)
     req.add_header("Authorization", f"Bearer {token}")
     req.add_header("Content-Type", content_type)
-    with urllib.request.urlopen(req, timeout=30) as response:
-        response.read()
+    try:
+        with urllib.request.urlopen(req, timeout=30) as response:
+            response.read()
+    except urllib.error.HTTPError as exc:
+        body = exc.read().decode("utf-8", errors="replace")
+        raise RuntimeError(f"LINE API upload error {exc.code} {exc.reason}: {body}") from exc
 
 
 def find_font(size: int, bold: bool = False) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
