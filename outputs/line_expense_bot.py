@@ -676,7 +676,8 @@ def menu_text() -> str:
 
 def menu_message() -> dict[str, Any]:
     return quick_reply_text_message(
-        "กรุณาเลือกเมนูที่ต้องการค่ะ\n\n"
+        "เมนูบัญชี\n"
+        "กรุณาเลือกงานที่ต้องการค่ะ\n\n"
         "1. บิลรายรับ\n"
         "2. บิลรายจ่าย\n"
         "3. เรียกดูรายละเอียดบัญชี\n"
@@ -687,6 +688,17 @@ def menu_message() -> dict[str, Any]:
             ("2 บิลรายจ่าย", "2"),
             ("3 เรียกดูบัญชี", "3"),
             ("4 ยกเลิกรายการ", "4"),
+        ],
+    )
+
+
+def coming_soon_message(section: str) -> dict[str, Any]:
+    return quick_reply_text_message(
+        f"หมวด {section}\n\n"
+        "ระบบหมวดนี้ยังอยู่ระหว่างเตรียมใช้งานค่ะ\n"
+        "ตอนนี้สามารถใช้งานหมวดบัญชีได้ก่อน",
+        [
+            ("เปิดเมนูบัญชี", "บัญชี"),
         ],
     )
 
@@ -1739,9 +1751,18 @@ def process_line_event_menu(event: dict[str, Any], public_base_url: str) -> str 
 
     if message.get("type") == "text":
         text = str(message.get("text") or "").strip()
-        if text in {"เมนู", "menu", "Menu", "MENU"}:
+        if text in {"เมนู", "menu", "Menu", "MENU", "บัญชี"}:
             clear_user_state(line_user_id)
             return menu_message()
+        if text in {"สต็อค", "สต๊อค", "stock", "Stock", "STOCK"}:
+            clear_user_state(line_user_id)
+            return coming_soon_message("สต็อค")
+        if text in {"HR", "hr", "Hr", "ฝ่ายบุคคล"}:
+            clear_user_state(line_user_id)
+            return coming_soon_message("HR")
+        if text in {"สินค้า", "product", "Product", "PRODUCT"}:
+            clear_user_state(line_user_id)
+            return coming_soon_message("สินค้า")
         if state.get("mode") == "awaiting_substitute_receipt_decision":
             if text == "1":
                 match = state.get("substitute_match")

@@ -10,6 +10,8 @@ outputs/*
 !outputs/line_bot_config.render.json
 !outputs/thai_vat_monthly_tracker_line_active.xlsx
 !outputs/RENDER_DEPLOY_STEPS.md
+!outputs/setup_line_rich_menu.py
+!outputs/SETUP_LINE_RICH_MENU.md
 outputs/__pycache__/
 outputs/line_bot_runtime.log
 outputs/line_bot_state.json
