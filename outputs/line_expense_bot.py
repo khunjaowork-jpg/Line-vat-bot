@@ -244,8 +244,8 @@ def normalize_amount(value: str) -> float | None:
 
 def parse_date(text: str) -> dt.date | None:
     patterns = [
-        r"(\d{1,2})[/-](\d{1,2})[/-](\d{2,4})",
-        r"(\d{4})[/-](\d{1,2})[/-](\d{1,2})",
+        r"(?<!\d)(\d{4})[/-](\d{1,2})[/-](\d{1,2})(?!\d)",
+        r"(?<!\d)(\d{1,2})[/-](\d{1,2})[/-](\d{2,4})(?!\d)",
     ]
     for pattern in patterns:
         match = re.search(pattern, text)
