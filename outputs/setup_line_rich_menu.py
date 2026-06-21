@@ -77,17 +77,15 @@ def create_rich_menu_image(path: Path) -> None:
     center_text(draw, (70, 55, width - 70, 205), "Khunjao Back Office", title_font, "#1E3A8A")
     center_text(draw, (70, 185, width - 70, 252), "เลือกหมวดงานที่ต้องการใช้งาน", hint_font, "#1D4ED8")
 
-    gap = 36
+    gap = 26
     top = 310
     left = 70
-    button_w = (width - (left * 2) - gap) // 2
-    button_h = (height - top - 70 - gap) // 2
-    boxes = [
-        (left, top, left + button_w, top + button_h),
-        (left + button_w + gap, top, width - left, top + button_h),
-        (left, top + button_h + gap, left + button_w, height - 70),
-        (left + button_w + gap, top + button_h + gap, width - left, height - 70),
-    ]
+    button_w = width - (left * 2)
+    button_h = (height - top - 70 - (gap * 3)) // 4
+    boxes = []
+    for index in range(4):
+        y1 = top + index * (button_h + gap)
+        boxes.append((left, y1, left + button_w, y1 + button_h))
     buttons = [
         ("บัญชี", "#BBF7D0", "#14532D"),
         ("สต็อค", "#BFDBFE", "#1E3A8A"),
@@ -119,10 +117,10 @@ def create_rich_menu(token: str, image_path: Path) -> str:
         "name": "Khunjao Back Office Menu",
         "chatBarText": "เมนูหลัก",
         "areas": [
-            {"bounds": {"x": 70, "y": 310, "width": 1162, "height": 635}, "action": {"type": "message", "text": "บัญชี"}},
-            {"bounds": {"x": 1268, "y": 310, "width": 1162, "height": 635}, "action": {"type": "message", "text": "สต็อค"}},
-            {"bounds": {"x": 70, "y": 981, "width": 1162, "height": 635}, "action": {"type": "message", "text": "HR"}},
-            {"bounds": {"x": 1268, "y": 981, "width": 1162, "height": 635}, "action": {"type": "message", "text": "สินค้า"}},
+            {"bounds": {"x": 70, "y": 310, "width": 2360, "height": 307}, "action": {"type": "message", "text": "บัญชี"}},
+            {"bounds": {"x": 70, "y": 643, "width": 2360, "height": 307}, "action": {"type": "message", "text": "สต็อค"}},
+            {"bounds": {"x": 70, "y": 976, "width": 2360, "height": 307}, "action": {"type": "message", "text": "HR"}},
+            {"bounds": {"x": 70, "y": 1309, "width": 2360, "height": 307}, "action": {"type": "message", "text": "สินค้า"}},
         ],
     }
     result = request_json("POST", RICH_MENU_API, token, payload)
