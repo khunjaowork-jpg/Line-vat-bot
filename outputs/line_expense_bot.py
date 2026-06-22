@@ -1873,7 +1873,7 @@ def process_line_event_menu(event: dict[str, Any], public_base_url: str) -> str 
             return coming_soon_message("HR")
         if text in {"สินค้า", "product", "Product", "PRODUCT"}:
             clear_user_state(line_user_id)
-            return coming_soon_message("สินค้า")
+            return stock_branch_menu_message()
         if state.get("mode") == "awaiting_substitute_receipt_decision":
             if text == "1":
                 match = state.get("substitute_match")
