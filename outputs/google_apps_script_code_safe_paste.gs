@@ -187,6 +187,7 @@ function getHrSchedule(ss, monthOffset) {
         sheetName: scheduleSs.getName() + " - " + target.getName(),
         url: scheduleSs.getUrl() + "#gid=" + target.getSheetId(),
         pdfUrl: pdf.url,
+        pdfDownloadUrl: pdf.downloadUrl,
         pdfFileId: pdf.fileId
       };
     } catch (err) {
@@ -195,7 +196,7 @@ function getHrSchedule(ss, monthOffset) {
   }
   var schedule = ss.getSheetByName(HR_SCHEDULE);
   var fallbackPdf = createSchedulePdf(ss, schedule);
-  return {status: "ok", sheetName: HR_SCHEDULE, url: ss.getUrl() + "#gid=" + schedule.getSheetId(), pdfUrl: fallbackPdf.url, pdfFileId: fallbackPdf.fileId};
+  return {status: "ok", sheetName: HR_SCHEDULE, url: ss.getUrl() + "#gid=" + schedule.getSheetId(), pdfUrl: fallbackPdf.url, pdfDownloadUrl: fallbackPdf.downloadUrl, pdfFileId: fallbackPdf.fileId};
 }
 
 function createSchedulePdf(scheduleSs, sheet) {
@@ -226,7 +227,7 @@ function createSchedulePdf(scheduleSs, sheet) {
   }
   var file = folder.createFile(response.getBlob().setName(fileName));
   file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
-  return {fileId: file.getId(), url: file.getUrl()};
+  return {fileId: file.getId(), url: file.getUrl(), downloadUrl: "https://drive.google.com/uc?export=download&id=" + file.getId()};
 }
 
 function pickCurrentScheduleSheet(scheduleSs, monthOffset) {

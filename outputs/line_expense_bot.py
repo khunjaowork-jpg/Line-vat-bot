@@ -5,6 +5,7 @@ import base64
 import datetime as dt
 import hashlib
 import hmac
+import io
 import json
 import mimetypes
 import os
@@ -1782,6 +1783,32 @@ def public_file_url(base_url: str, path: Path) -> str:
     return f"{base_url.rstrip('/')}/files/{path.name}"
 
 
+def download_binary(url: str, timeout: int = 45) -> bytes:
+    request = urllib.request.Request(url, headers={"User-Agent": "LineExpenseBot/2.0"})
+    with urllib.request.urlopen(request, timeout=timeout) as response:
+        return response.read()
+
+
+def render_pdf_first_page_to_jpeg(pdf_bytes: bytes, label: str = "schedule") -> Path:
+    import fitz
+    from PIL import Image
+
+    out_dir = reply_image_dir()
+    out_dir.mkdir(parents=True, exist_ok=True)
+    safe_label = re.sub(r"[^A-Za-z0-9_-]+", "_", label).strip("_") or "schedule"
+    path = out_dir / f"{safe_label}_{uuid.uuid4().hex[:8]}.jpg"
+    document = fitz.open(stream=pdf_bytes, filetype="pdf")
+    try:
+        page = document.load_page(0)
+        pixmap = page.get_pixmap(matrix=fitz.Matrix(2.2, 2.2), alpha=False)
+        png_bytes = pixmap.tobytes("png")
+    finally:
+        document.close()
+    image = Image.open(io.BytesIO(png_bytes)).convert("RGB")
+    image.save(path, "JPEG", quality=92, optimize=True)
+    return path
+
+
 def to_float(value: Any) -> float:
     if isinstance(value, (int, float)):
         return float(value)
@@ -2377,12 +2404,23 @@ def process_line_event_menu(event: dict[str, Any], public_base_url: str) -> str 
                 return abort_flow_message(f"เปิดตารางงานไม่สำเร็จค่ะ ({exc})")
             url = result.get("url") or result.get("spreadsheetUrl") or ""
             pdf_url = result.get("pdfUrl") or result.get("pdf_url") or ""
+            pdf_download_url = result.get("pdfDownloadUrl") or result.get("pdf_download_url") or pdf_url
             sheet_name = result.get("sheetName") or "HR_Work_Schedule"
-            if pdf_url:
+            if pdf_download_url:
+                try:
+                    pdf_bytes = download_binary(str(pdf_download_url))
+                    image_path = render_pdf_first_page_to_jpeg(pdf_bytes, f"hr_schedule_{month_offset}")
+                    return [
+                        text_message(f"ตารางงาน\n{sheet_name}"),
+                        image_message(public_file_url(public_base_url, image_path)),
+                    ]
+                except Exception as exc:
+                    runtime_log(f"Schedule PDF to JPEG failed: {exc}")
                 return (
-                    "ตารางงาน PDF\n"
+                    "ตารางงาน\n"
                     f"{sheet_name}\n"
-                    f"{pdf_url}\n\n"
+                    f"{pdf_url or url}\n\n"
+                    "ระบบแปลงเป็นรูปไม่สำเร็จชั่วคราว จึงส่งลิงก์สำรองให้ค่ะ\n"
                     f"ลิงก์ Google Sheet: {url}"
                 )
             return f"ตารางงาน\n{sheet_name}\n{url}"
