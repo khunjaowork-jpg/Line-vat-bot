@@ -202,9 +202,12 @@ function getHrSchedule(ss, monthOffset) {
 function createSchedulePdf(scheduleSs, sheet) {
   var folder = getOrCreateFolder(HR_SCHEDULE_PDF_FOLDER);
   var fileName = "ตารางงาน - " + sheet.getName() + " - " + Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "yyyyMMdd-HHmmss") + ".pdf";
-  var url = "https://docs.google.com/spreadsheets/d/" + scheduleSs.getId() + "/export" +
+  var sourceRange = findScheduleTableRange(sheet);
+  var exportBook = createScheduleExportBook(sourceRange, sheet.getName());
+  var exportSheet = exportBook.getSheets()[0];
+  var url = "https://docs.google.com/spreadsheets/d/" + exportBook.getId() + "/export" +
     "?format=pdf" +
-    "&gid=" + sheet.getSheetId() +
+    "&gid=" + exportSheet.getSheetId() +
     "&portrait=true" +
     "&size=A4" +
     "&fitw=true" +
@@ -218,16 +221,75 @@ function createSchedulePdf(scheduleSs, sheet) {
     "&pagenumbers=false" +
     "&gridlines=false" +
     "&fzr=false";
-  var response = UrlFetchApp.fetch(url, {
-    headers: {Authorization: "Bearer " + ScriptApp.getOAuthToken()},
-    muteHttpExceptions: true
-  });
-  if (response.getResponseCode() !== 200) {
-    throw new Error("export schedule PDF failed: " + response.getResponseCode());
+  try {
+    var response = UrlFetchApp.fetch(url, {
+      headers: {Authorization: "Bearer " + ScriptApp.getOAuthToken()},
+      muteHttpExceptions: true
+    });
+    if (response.getResponseCode() !== 200) {
+      throw new Error("export schedule PDF failed: " + response.getResponseCode());
+    }
+    var file = folder.createFile(response.getBlob().setName(fileName));
+    file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+    return {fileId: file.getId(), url: file.getUrl(), downloadUrl: "https://drive.google.com/uc?export=download&id=" + file.getId()};
+  } finally {
+    DriveApp.getFileById(exportBook.getId()).setTrashed(true);
   }
-  var file = folder.createFile(response.getBlob().setName(fileName));
-  file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
-  return {fileId: file.getId(), url: file.getUrl(), downloadUrl: "https://drive.google.com/uc?export=download&id=" + file.getId()};
+}
+
+function findScheduleTableRange(sheet) {
+  var range = sheet.getDataRange();
+  var values = range.getDisplayValues();
+  var minRow = values.length;
+  var minCol = values[0] ? values[0].length : 1;
+  var maxRow = -1;
+  var maxCol = -1;
+  for (var r = 0; r < values.length; r++) {
+    for (var c = 0; c < values[r].length; c++) {
+      if (String(values[r][c] || "").trim() !== "") {
+        minRow = Math.min(minRow, r);
+        minCol = Math.min(minCol, c);
+        maxRow = Math.max(maxRow, r);
+        maxCol = Math.max(maxCol, c);
+      }
+    }
+  }
+  if (maxRow < 0 || maxCol < 0) {
+    return sheet.getRange(1, 1, 1, 1);
+  }
+  return sheet.getRange(minRow + 1, minCol + 1, maxRow - minRow + 1, maxCol - minCol + 1);
+}
+
+function createScheduleExportBook(sourceRange, sourceName) {
+  var exportBook = SpreadsheetApp.create("LINE schedule export - " + sourceName + " - " + Utilities.getUuid());
+  var exportSheet = exportBook.getSheets()[0];
+  var numRows = sourceRange.getNumRows();
+  var numCols = sourceRange.getNumColumns();
+  if (exportSheet.getMaxRows() < numRows) {
+    exportSheet.insertRowsAfter(exportSheet.getMaxRows(), numRows - exportSheet.getMaxRows());
+  }
+  if (exportSheet.getMaxColumns() < numCols) {
+    exportSheet.insertColumnsAfter(exportSheet.getMaxColumns(), numCols - exportSheet.getMaxColumns());
+  }
+  sourceRange.copyTo(exportSheet.getRange(1, 1), {contentsOnly: false});
+  var sourceSheet = sourceRange.getSheet();
+  var startRow = sourceRange.getRow();
+  var startCol = sourceRange.getColumn();
+  for (var c = 0; c < numCols; c++) {
+    exportSheet.setColumnWidth(c + 1, sourceSheet.getColumnWidth(startCol + c));
+  }
+  for (var r = 0; r < numRows; r++) {
+    exportSheet.setRowHeight(r + 1, sourceSheet.getRowHeight(startRow + r));
+  }
+  if (exportSheet.getMaxColumns() > numCols) {
+    exportSheet.deleteColumns(numCols + 1, exportSheet.getMaxColumns() - numCols);
+  }
+  if (exportSheet.getMaxRows() > numRows) {
+    exportSheet.deleteRows(numRows + 1, exportSheet.getMaxRows() - numRows);
+  }
+  exportSheet.setHiddenGridlines(true);
+  SpreadsheetApp.flush();
+  return exportBook;
 }
 
 function pickCurrentScheduleSheet(scheduleSs, monthOffset) {
