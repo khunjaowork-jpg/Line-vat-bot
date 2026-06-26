@@ -205,7 +205,7 @@ function createSchedulePdf(scheduleSs, sheet) {
   var url = "https://docs.google.com/spreadsheets/d/" + scheduleSs.getId() + "/export" +
     "?format=pdf" +
     "&gid=" + sheet.getSheetId() +
-    "&portrait=false" +
+    "&portrait=true" +
     "&size=A4" +
     "&fitw=true" +
     "&scale=4" +
