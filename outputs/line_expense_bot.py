@@ -216,6 +216,27 @@ def reply_messages(reply_token: str, messages: list[dict[str, Any]]) -> None:
         runtime_log(f"LINE reply failed: {exc}")
 
 
+def push_line_messages(to_id: str, messages: list[dict[str, Any]]) -> None:
+    line_config = CONFIG.get("line", {})
+    token_name = line_config.get("channel_access_token_env", "LINE_CHANNEL_ACCESS_TOKEN")
+    token = os.getenv(token_name)
+    if not token or not to_id:
+        runtime_log("LINE push skipped: missing token or target id")
+        return
+    payload = {"to": to_id, "messages": messages[:5]}
+    try:
+        line_request(
+            "POST",
+            "https://api.line.me/v2/bot/message/push",
+            token,
+            data=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
+            content_type="application/json",
+        )
+        runtime_log(f"LINE push sent to {to_id}")
+    except Exception as exc:
+        runtime_log(f"LINE push failed: {exc}")
+
+
 def text_message(text: str) -> dict[str, Any]:
     return {"type": "text", "text": text[:4900]}
 
@@ -496,7 +517,7 @@ def ocr_image(image_path: Path) -> str:
         image.thumbnail((int(CONFIG.get("ocr_max_dimension", 1600)), int(CONFIG.get("ocr_max_dimension", 1600))))
         image = ImageOps.autocontrast(image.convert("L"))
         tesseract_config = CONFIG.get("tesseract_config", "--oem 1 --psm 11")
-        timeout = int(CONFIG.get("ocr_timeout_seconds", 25))
+        timeout = int(CONFIG.get("ocr_timeout_seconds", 15))
         try:
             return pytesseract.image_to_string(image, lang=lang, config=tesseract_config, timeout=timeout)
         except RuntimeError as exc:
@@ -520,7 +541,7 @@ def google_vision_ocr_image(image_path: Path, api_key: str) -> str:
         headers={"Content-Type": "application/json; charset=utf-8"},
         method="POST",
     )
-    timeout = int(CONFIG.get("google_vision_timeout_seconds", 45))
+    timeout = int(CONFIG.get("google_vision_timeout_seconds", 15))
     with urllib.request.urlopen(request, timeout=timeout) as response:
         result = json.loads(response.read().decode("utf-8"))
 
@@ -678,6 +699,7 @@ def correction_form(data: dict[str, Any]) -> str:
         f"วันที่: {data.get('date') or ''}\n"
         f"เลขที่บิล: {normalize_invoice_no(data.get('invoice_no'))}\n"
         f"ชื่อร้าน/คู่ค้า: {data.get('vendor') or ''}\n"
+        f"ผู้นำส่งเอกสาร: {data.get('submitter_name') or ''}\n"
         f"หมวด: {data.get('category') or ''}\n"
         f"ยอดก่อน VAT: {float(data.get('before_vat') or 0):.2f}\n"
         f"VAT: {float(data.get('vat') or 0):.2f}\n"
@@ -741,6 +763,152 @@ def stock_branch_menu_message() -> dict[str, Any]:
             ("4. เขาใหญ่", "ค้นหาสินค้า:เขาใหญ่"),
         ],
     )
+
+
+def hr_menu_message() -> dict[str, Any]:
+    return quick_reply_text_message(
+        "กรุณาเลือกเมนู HR\n\n"
+        "1. ตารางงาน\n"
+        "2. ลาป่วย\n"
+        "3. ลากิจ\n"
+        "4. แจ้งขอวันหยุดล่วงหน้า\n"
+        "5. แจ้งเปลี่ยนเวลาเข้า-ออกงาน\n"
+        "6. แจ้งเปลี่ยนวันทำงาน",
+        [
+            ("1 ตารางงาน", "ตารางงาน"),
+            ("2 ลาป่วย", "ลาป่วย"),
+            ("3 ลากิจ", "ลากิจ"),
+            ("4 ขอวันหยุด", "แจ้งขอวันหยุดล่วงหน้า"),
+            ("5 เปลี่ยนเวลา", "แจ้งเปลี่ยนเวลาเข้า-ออกงาน"),
+            ("6 เปลี่ยนวัน", "แจ้งเปลี่ยนวันทำงาน"),
+        ],
+    )
+
+
+def hr_request_blank(request_type: str, line_user_id: str = "") -> dict[str, Any]:
+    today = dt.date.today().isoformat()
+    return {
+        "request_type": request_type,
+        "employee_name": get_line_display_name(line_user_id),
+        "start_date": today,
+        "end_date": today,
+        "work_date": today,
+        "old_date": "",
+        "new_date": "",
+        "old_time": "",
+        "new_time": "",
+        "reason": "",
+        "note": "",
+        "status": "รออนุมัติ",
+    }
+
+
+def hr_request_form(data: dict[str, Any]) -> str:
+    request_type = str(data.get("request_type") or "คำขอ HR")
+    common = (
+        f"==== {request_type} ====\n"
+        "กรุณากรอก/แก้ไขเฉพาะหัวข้อที่ต้องการ แล้วส่งกลับมาได้เลยค่ะ\n\n"
+        f"ชื่อพนักงาน: {data.get('employee_name') or ''}\n"
+    )
+    if request_type in {"ลาป่วย", "ลากิจ", "แจ้งขอวันหยุดล่วงหน้า"}:
+        return (
+            common +
+            f"วันที่เริ่ม: {data.get('start_date') or ''}\n"
+            f"วันที่สิ้นสุด: {data.get('end_date') or ''}\n"
+            f"เหตุผล: {data.get('reason') or ''}\n"
+            f"หมายเหตุ: {data.get('note') or ''}"
+        )
+    if request_type == "แจ้งเปลี่ยนเวลาเข้า-ออกงาน":
+        return (
+            common +
+            f"วันที่ทำงาน: {data.get('work_date') or ''}\n"
+            f"เวลาเดิม: {data.get('old_time') or ''}\n"
+            f"เวลาใหม่: {data.get('new_time') or ''}\n"
+            f"เหตุผล: {data.get('reason') or ''}\n"
+            f"หมายเหตุ: {data.get('note') or ''}"
+        )
+    if request_type == "แจ้งเปลี่ยนวันทำงาน":
+        return (
+            common +
+            f"วันที่เดิม: {data.get('old_date') or ''}\n"
+            f"วันที่ใหม่: {data.get('new_date') or ''}\n"
+            f"เหตุผล: {data.get('reason') or ''}\n"
+            f"หมายเหตุ: {data.get('note') or ''}"
+        )
+    return common + f"รายละเอียด: {data.get('note') or ''}"
+
+
+def format_hr_request(data: dict[str, Any]) -> str:
+    return (
+        f"==== คำขอ HR ====\n"
+        f"ประเภท: {data.get('request_type') or '-'}\n"
+        f"ชื่อพนักงาน: {data.get('employee_name') or '-'}\n"
+        f"วันที่เริ่ม: {data.get('start_date') or '-'}\n"
+        f"วันที่สิ้นสุด: {data.get('end_date') or '-'}\n"
+        f"วันที่ทำงาน: {data.get('work_date') or '-'}\n"
+        f"วันที่เดิม: {data.get('old_date') or '-'}\n"
+        f"วันที่ใหม่: {data.get('new_date') or '-'}\n"
+        f"เวลาเดิม: {data.get('old_time') or '-'}\n"
+        f"เวลาใหม่: {data.get('new_time') or '-'}\n"
+        f"เหตุผล: {data.get('reason') or '-'}\n"
+        f"หมายเหตุ: {data.get('note') or '-'}\n"
+        f"สถานะ: {data.get('status') or 'รออนุมัติ'}"
+    )
+
+
+def hr_confirm_message(data: dict[str, Any]) -> dict[str, Any]:
+    return quick_reply_text_message(
+        format_hr_request(data) + "\n\n"
+        "กรุณาตรวจสอบข้อมูลก่อนส่งคำขออนุมัติ\n"
+        "1 = ยืนยันส่งคำขอ\n"
+        "2 = แก้ไขข้อมูล",
+        [
+            ("1 ยืนยัน", "1"),
+            ("2 แก้ไข", "2"),
+        ],
+    )
+
+
+def parse_hr_request_text(text: str, data: dict[str, Any]) -> dict[str, Any]:
+    updated = dict(data)
+    aliases = {
+        "ประเภท": "request_type",
+        "ชื่อพนักงาน": "employee_name",
+        "ชื่อ": "employee_name",
+        "วันที่เริ่ม": "start_date",
+        "วันที่สิ้นสุด": "end_date",
+        "วันที่ลา": "start_date",
+        "วันที่ทำงาน": "work_date",
+        "วันที่เดิม": "old_date",
+        "วันที่ใหม่": "new_date",
+        "เวลาเดิม": "old_time",
+        "เวลาใหม่": "new_time",
+        "เหตุผล": "reason",
+        "หมายเหตุ": "note",
+        "รายละเอียด": "note",
+    }
+    normalized_aliases = {re.sub(r"[\s/_-]+", "", k.lower()): v for k, v in aliases.items()}
+    for raw_line in text.splitlines():
+        line = raw_line.strip()
+        if not line:
+            continue
+        line = re.sub(r"^(แก้ไข|เปลี่ยน)\s*", "", line)
+        match = re.match(r"^([^:=:\-]+)\s*[:=:\-]\s*(.*)$", line)
+        if not match:
+            match = re.match(r"^(\S+)\s+(.+)$", line)
+        if not match:
+            continue
+        raw_key = match.group(1).strip().lower()
+        value = match.group(2).strip()
+        key = aliases.get(raw_key) or normalized_aliases.get(re.sub(r"[\s/_-]+", "", raw_key))
+        if not key:
+            continue
+        if key.endswith("date") or key in {"start_date", "end_date", "work_date", "old_date", "new_date"}:
+            parsed = parse_date(value)
+            updated[key] = parsed.isoformat() if parsed else value
+        else:
+            updated[key] = value
+    return updated
 
 
 def abort_flow_message(reason: str) -> str:
@@ -993,6 +1161,7 @@ def parse_correction_text_v2(text: str, data: dict[str, Any]) -> dict[str, Any]:
         if not line:
             continue
         line = re.sub(r"^[\-\*\u2022]\s*", "", line)
+        line = re.sub(r"^(แก้ไข|เปลี่ยน)\s*", "", line)
         match = re.match(r"^([^:=:\-]+)\s*[:=:\-]\s*(.+)$", line)
         if not match:
             match = re.match(rf"^({keyword_pattern})\s+(.+)$", line, flags=re.IGNORECASE)
@@ -1717,6 +1886,29 @@ def update_google_sheet_document_type(row: int, document_type: str, sheet_name: 
     return google_sheet_action("updateDocumentType", **payload)
 
 
+def save_hr_request_to_google(data: dict[str, Any], line_user_id: str) -> dict[str, Any]:
+    payload = dict(data)
+    payload["lineUserId"] = line_user_id
+    return google_sheet_action("saveHrRequest", data=payload)
+
+
+def get_hr_schedule_link() -> dict[str, Any]:
+    return google_sheet_action("getHrSchedule")
+
+
+def save_medical_certificate_to_google(request_id: str, image_path: Path, line_user_id: str) -> dict[str, Any]:
+    raw = image_path.read_bytes()
+    mime_type = mimetypes.guess_type(str(image_path))[0] or "image/jpeg"
+    return google_sheet_action(
+        "saveMedicalCertificate",
+        requestId=request_id,
+        lineUserId=line_user_id,
+        fileName=image_path.name,
+        mimeType=mime_type,
+        data=base64.b64encode(raw).decode("ascii"),
+    )
+
+
 def format_google_sheet_matches(matches: list[dict[str, Any]], heading: str) -> str:
     lines = [heading]
     for item in matches[:10]:
@@ -1822,6 +2014,11 @@ def process_line_event_menu(event: dict[str, Any], public_base_url: str) -> str 
 
     if message.get("type") == "text":
         text = str(message.get("text") or "").strip()
+        if state.get("mode") == "awaiting_hr_medical_certificate" and text not in {"เมนู", "menu", "Menu", "MENU", "ยกเลิก"}:
+            return "กรุณาส่งรูปใบรับรองแพทย์สำหรับวันที่ลาป่วยค่ะ หรือพิมพ์ ยกเลิก เพื่อเริ่มใหม่"
+        if state.get("mode") == "awaiting_hr_medical_certificate" and text == "ยกเลิก":
+            clear_user_state(line_user_id)
+            return hr_menu_message()
         if text in {"เมนู", "menu", "Menu", "MENU", "บัญชี"}:
             clear_user_state(line_user_id)
             return menu_message()
@@ -1870,10 +2067,30 @@ def process_line_event_menu(event: dict[str, Any], public_base_url: str) -> str 
             ]
         if text in {"HR", "hr", "Hr", "ฝ่ายบุคคล"}:
             clear_user_state(line_user_id)
-            return coming_soon_message("HR")
+            return hr_menu_message()
         if text in {"สินค้า", "product", "Product", "PRODUCT"}:
             clear_user_state(line_user_id)
             return stock_branch_menu_message()
+        if text == "ตารางงาน":
+            clear_user_state(line_user_id)
+            try:
+                result = get_hr_schedule_link()
+            except Exception as exc:
+                runtime_log(f"Get HR schedule failed: {exc}")
+                return abort_flow_message(f"เปิดตารางงานไม่สำเร็จค่ะ ({exc})")
+            url = result.get("url") or result.get("spreadsheetUrl") or ""
+            sheet_name = result.get("sheetName") or "HR_Work_Schedule"
+            return f"ตารางงาน\n{sheet_name}\n{url}"
+        if text in {"ลาป่วย", "ลากิจ", "แจ้งขอวันหยุดล่วงหน้า", "แจ้งเปลี่ยนเวลาเข้า-ออกงาน", "แจ้งเปลี่ยนวันทำงาน"}:
+            draft = hr_request_blank(text, line_user_id)
+            set_user_state(
+                line_user_id,
+                {
+                    "mode": "awaiting_hr_form",
+                    "hr_request": draft,
+                },
+            )
+            return hr_request_form(draft)
         if state.get("mode") == "awaiting_substitute_receipt_decision":
             if text == "1":
                 match = state.get("substitute_match")
@@ -2045,6 +2262,60 @@ def process_line_event_menu(event: dict[str, Any], public_base_url: str) -> str 
             state["mode"] = "awaiting_correction"
             set_user_state(line_user_id, state)
             return manual_entry_form(deserialize_data(state.get("pending_data", {})))
+        if state.get("mode") == "awaiting_hr_form":
+            draft = dict(state.get("hr_request") or {})
+            updated = parse_hr_request_text(text, draft)
+            state["mode"] = "awaiting_hr_confirm"
+            state["hr_request"] = updated
+            set_user_state(line_user_id, state)
+            return hr_confirm_message(updated)
+        if state.get("mode") == "awaiting_hr_confirm":
+            if text == "1":
+                request_data = dict(state.get("hr_request") or {})
+                if not str(request_data.get("employee_name") or "").strip():
+                    state["mode"] = "awaiting_hr_form"
+                    set_user_state(line_user_id, state)
+                    return "กรุณาระบุชื่อพนักงานก่อนส่งคำขอค่ะ\n\n" + hr_request_form(request_data)
+                try:
+                    result = save_hr_request_to_google(request_data, line_user_id)
+                except Exception as exc:
+                    runtime_log(f"Save HR request failed: {exc}")
+                    clear_user_state(line_user_id)
+                    return abort_flow_message(f"บันทึกคำขอ HR ไม่สำเร็จค่ะ ({exc})")
+                request_id = str(result.get("requestId") or result.get("row") or uuid.uuid4().hex[:8])
+                request_data["request_id"] = request_id
+                approver_id = str(CONFIG.get("hr_approver_line_id") or os.getenv("HR_APPROVER_LINE_ID") or "Ud260925c43fb0823fea42224a2929393")
+                push_line_messages(
+                    approver_id,
+                    [
+                        text_message(
+                            "มีคำขอ HR รออนุมัติ\n\n"
+                            + format_hr_request(request_data)
+                            + f"\n\nRequest ID: {request_id}"
+                        )
+                    ],
+                )
+                if request_data.get("request_type") == "ลาป่วย":
+                    set_user_state(
+                        line_user_id,
+                        {
+                            "mode": "awaiting_hr_medical_certificate",
+                            "hr_request": request_data,
+                            "hr_request_id": request_id,
+                        },
+                    )
+                    return (
+                        "ส่งคำขอลาป่วยเรียบร้อยค่ะ\n"
+                        f"Request ID: {request_id}\n\n"
+                        "กรุณาส่งรูปใบรับรองแพทย์สำหรับวันที่ลาป่วยเข้ามาได้เลยค่ะ"
+                    )
+                clear_user_state(line_user_id)
+                return f"ส่งคำขอ HR เรียบร้อยค่ะ\nRequest ID: {request_id}\nสถานะ: รออนุมัติ"
+            if text == "2":
+                state["mode"] = "awaiting_hr_form"
+                set_user_state(line_user_id, state)
+                return hr_request_form(dict(state.get("hr_request") or {}))
+            return "กรุณาตอบ 1 เพื่อยืนยันส่งคำขอ หรือ 2 เพื่อแก้ไขข้อมูลค่ะ"
         if text in {"1", "บิลรายรับ"}:
             set_user_state(line_user_id, {"mode": "awaiting_image", "transaction_type": "Revenue"})
             return "ส่งเอกสารเพื่อลงรายละเอียดในระบบได้เลยค่ะ"
@@ -2149,6 +2420,35 @@ def process_line_event_menu(event: dict[str, Any], public_base_url: str) -> str 
 
     if message.get("type") not in {"image", "file"}:
         return menu_message() if not state.get("mode") else menu_text()
+
+    if state.get("mode") == "awaiting_hr_medical_certificate":
+        token = os.getenv(CONFIG["line"]["channel_access_token_env"])
+        if not token:
+            raise RuntimeError(f"Missing {CONFIG['line']['channel_access_token_env']}")
+        try:
+            runtime_log("Downloading LINE medical certificate content")
+            image_path = download_line_content(message["id"], token, resolve_path(CONFIG["image_archive_dir"]))
+            request_id = str(state.get("hr_request_id") or "")
+            result = save_medical_certificate_to_google(request_id, image_path, line_user_id)
+        except Exception as exc:
+            runtime_log(f"Medical certificate save failed: {exc}")
+            clear_user_state(line_user_id)
+            return abort_flow_message(f"บันทึกใบรับรองแพทย์ไม่สำเร็จค่ะ ({exc})")
+        request_data = dict(state.get("hr_request") or {})
+        approver_id = str(CONFIG.get("hr_approver_line_id") or os.getenv("HR_APPROVER_LINE_ID") or "Ud260925c43fb0823fea42224a2929393")
+        file_url = result.get("fileUrl") or result.get("url") or ""
+        push_line_messages(
+            approver_id,
+            [
+                text_message(
+                    "ได้รับใบรับรองแพทย์สำหรับคำขอลาป่วย\n\n"
+                    + format_hr_request(request_data)
+                    + f"\n\nRequest ID: {request_id}\nไฟล์: {file_url}"
+                )
+            ],
+        )
+        clear_user_state(line_user_id)
+        return f"บันทึกใบรับรองแพทย์เรียบร้อยค่ะ\nRequest ID: {request_id}\n{file_url}"
 
     if state.get("mode") != "awaiting_image":
         return [

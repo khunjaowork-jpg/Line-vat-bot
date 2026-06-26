@@ -4,7 +4,14 @@ var EX = "Expenses";
 var RV = "Revenue";
 var LOG = "Import_Log";
 var STOCK_SPREADSHEET_ID = "1Wu3jj8iHu70DKecFuWTu6_yf8T418GBv74Mz_zOtgWQ";
+var HR_REQ = "HR_Requests";
+var HR_MED = "HR_Medical_Certificates";
+var HR_SCHEDULE = "HR_Work_Schedule";
+var HR_MEDICAL_FOLDER = "LINE HR Medical Certificates";
 var HEADERS = ["Date","Type","Invoice No","Vendor","Description","Category","Before VAT","VAT Rate","VAT","Total","Claimable","Month","Image URL","Confidence","Revenue Before VAT","Expense Before VAT","Raw Text","Document Type","LINE User ID","Submitter Name","Saved At"];
+var HR_HEADERS = ["Request ID","Submitted At","Request Type","Employee Name","Start Date","End Date","Work Date","Old Date","New Date","Old Time","New Time","Reason","Note","Status","LINE User ID","Approver Note","Updated At"];
+var HR_MED_HEADERS = ["Request ID","Uploaded At","Employee Name","Leave Date","File Name","File URL","LINE User ID"];
+var HR_SCHEDULE_HEADERS = ["Date","Branch","Employee Name","Start Time","End Time","Role","Note"];
 
 function doGet() {
   return out({status: "ok", version: "safe-paste-2026-06-21"});
@@ -21,6 +28,9 @@ function doPost(e) {
     ensure(ss, EX, HEADERS);
     ensure(ss, RV, HEADERS);
     ensure(ss, LOG, ["Time","Status","Invoice No","Type","Vendor","Total","Note"]);
+    ensure(ss, HR_REQ, HR_HEADERS);
+    ensure(ss, HR_MED, HR_MED_HEADERS);
+    ensure(ss, HR_SCHEDULE, HR_SCHEDULE_HEADERS);
     if (p.action === "searchByTotal") {
       return out({status: "ok", matches: searchByTotal(ss, num(p.total))});
     }
@@ -32,6 +42,16 @@ function doPost(e) {
     }
     if (p.action === "searchStock") {
       return out({status: "ok", matches: searchStock(String(p.branch || ""), String(p.query || ""))});
+    }
+    if (p.action === "saveHrRequest") {
+      return out(saveHrRequest(ss, p.data || {}));
+    }
+    if (p.action === "saveMedicalCertificate") {
+      return out(saveMedicalCertificate(ss, p));
+    }
+    if (p.action === "getHrSchedule") {
+      var schedule = ss.getSheetByName(HR_SCHEDULE);
+      return out({status: "ok", sheetName: HR_SCHEDULE, url: ss.getUrl() + "#gid=" + schedule.getSheetId()});
     }
     var d = p.data || p;
     var row = buildRow(d);
@@ -126,6 +146,71 @@ function stockTab(branch) {
   if (b === "ทะเล") return "Stock_ทะเล";
   if (b === "เขาใหญ่") return "Stock_เขาใหญ่";
   return "Stock_" + b;
+}
+
+function saveHrRequest(ss, d) {
+  var sh = ss.getSheetByName(HR_REQ);
+  var requestId = d.requestId || d.request_id || ("HR-" + Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "yyyyMMdd-HHmmss") + "-" + Math.floor(Math.random() * 1000));
+  var row = [
+    requestId,
+    new Date(),
+    d.requestType || d.request_type || "",
+    d.employeeName || d.employee_name || "",
+    d.startDate || d.start_date || "",
+    d.endDate || d.end_date || "",
+    d.workDate || d.work_date || "",
+    d.oldDate || d.old_date || "",
+    d.newDate || d.new_date || "",
+    d.oldTime || d.old_time || "",
+    d.newTime || d.new_time || "",
+    d.reason || "",
+    d.note || "",
+    d.status || "รออนุมัติ",
+    d.lineUserId || d.line_user_id || "",
+    "",
+    new Date()
+  ];
+  sh.appendRow(row);
+  return {status: "ok", requestId: requestId, row: sh.getLastRow(), sheetName: HR_REQ};
+}
+
+function saveMedicalCertificate(ss, p) {
+  var requestId = String(p.requestId || p.request_id || "");
+  if (!requestId) throw new Error("missing requestId");
+  var bytes = Utilities.base64Decode(String(p.data || ""));
+  var mimeType = String(p.mimeType || p.mime_type || "image/jpeg");
+  var fileName = String(p.fileName || p.file_name || (requestId + ".jpg"));
+  var folder = getOrCreateFolder(HR_MEDICAL_FOLDER);
+  var file = folder.createFile(Utilities.newBlob(bytes, mimeType, fileName));
+  var request = findHrRequest(ss, requestId);
+  var sh = ss.getSheetByName(HR_MED);
+  sh.appendRow([
+    requestId,
+    new Date(),
+    request.employeeName || "",
+    request.startDate || "",
+    fileName,
+    file.getUrl(),
+    p.lineUserId || p.line_user_id || ""
+  ]);
+  return {status: "ok", requestId: requestId, fileId: file.getId(), fileUrl: file.getUrl(), sheetName: HR_MED, row: sh.getLastRow()};
+}
+
+function findHrRequest(ss, requestId) {
+  var sh = ss.getSheetByName(HR_REQ);
+  var values = sh.getDataRange().getValues();
+  for (var i = 1; i < values.length; i++) {
+    if (String(values[i][0]) === String(requestId)) {
+      return {employeeName: values[i][3], startDate: fmtDate(values[i][4])};
+    }
+  }
+  return {};
+}
+
+function getOrCreateFolder(name) {
+  var folders = DriveApp.getFoldersByName(name);
+  if (folders.hasNext()) return folders.next();
+  return DriveApp.createFolder(name);
 }
 
 function deleteRow(ss, row, sheetName) {
