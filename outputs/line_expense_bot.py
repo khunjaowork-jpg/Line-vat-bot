@@ -765,24 +765,134 @@ def stock_branch_menu_message() -> dict[str, Any]:
     )
 
 
-def hr_menu_message() -> dict[str, Any]:
-    return quick_reply_text_message(
-        "กรุณาเลือกเมนู HR\n\n"
-        "1. ตารางงาน\n"
-        "2. ลาป่วย\n"
-        "3. ลากิจ\n"
-        "4. แจ้งขอวันหยุดล่วงหน้า\n"
-        "5. แจ้งเปลี่ยนเวลาเข้า-ออกงาน\n"
-        "6. แจ้งเปลี่ยนวันทำงาน",
-        [
-            ("1 ตารางงาน", "ตารางงาน"),
-            ("2 ลาป่วย", "ลาป่วย"),
-            ("3 ลากิจ", "ลากิจ"),
-            ("4 ขอวันหยุด", "แจ้งขอวันหยุดล่วงหน้า"),
-            ("5 เปลี่ยนเวลา", "แจ้งเปลี่ยนเวลาเข้า-ออกงาน"),
-            ("6 เปลี่ยนวัน", "แจ้งเปลี่ยนวันทำงาน"),
+def hr_menu_button(
+    number: str,
+    title: str,
+    subtitle: str,
+    text: str,
+    background: str,
+    accent: str,
+) -> dict[str, Any]:
+    return {
+        "type": "box",
+        "layout": "horizontal",
+        "cornerRadius": "18px",
+        "backgroundColor": background,
+        "paddingAll": "14px",
+        "spacing": "12px",
+        "action": {"type": "message", "label": title[:20], "text": text},
+        "contents": [
+            {
+                "type": "box",
+                "layout": "vertical",
+                "width": "50px",
+                "height": "50px",
+                "cornerRadius": "18px",
+                "backgroundColor": accent,
+                "alignItems": "center",
+                "justifyContent": "center",
+                "contents": [
+                    {
+                        "type": "text",
+                        "text": number,
+                        "weight": "bold",
+                        "size": "xxl",
+                        "color": "#FFFFFF",
+                        "align": "center",
+                    }
+                ],
+            },
+            {
+                "type": "box",
+                "layout": "vertical",
+                "flex": 1,
+                "spacing": "3px",
+                "justifyContent": "center",
+                "contents": [
+                    {
+                        "type": "text",
+                        "text": title,
+                        "weight": "bold",
+                        "size": "lg",
+                        "color": "#1F2937",
+                        "wrap": True,
+                    },
+                    {
+                        "type": "text",
+                        "text": subtitle,
+                        "size": "sm",
+                        "color": "#64748B",
+                        "wrap": True,
+                    },
+                ],
+            },
+            {
+                "type": "box",
+                "layout": "vertical",
+                "width": "32px",
+                "height": "32px",
+                "cornerRadius": "16px",
+                "backgroundColor": "#FFFFFF",
+                "alignItems": "center",
+                "justifyContent": "center",
+                "contents": [
+                    {
+                        "type": "text",
+                        "text": ">",
+                        "weight": "bold",
+                        "size": "lg",
+                        "color": accent,
+                        "align": "center",
+                    }
+                ],
+            },
         ],
-    )
+    }
+
+
+def hr_menu_message() -> dict[str, Any]:
+    buttons = [
+        hr_menu_button("1", "ตารางงาน", "ดูตารางงานของคุณ", "ตารางงาน", "#F3ECFF", "#8B5CF6"),
+        hr_menu_button("2", "ลาป่วย", "แจ้งลาป่วย / บันทึกการลาป่วย", "ลาป่วย", "#E8FBF7", "#2DD4BF"),
+        hr_menu_button("3", "ลากิจ", "แจ้งลากิจ / บันทึกการลากิจ", "ลากิจ", "#FFF7E6", "#F59E0B"),
+        hr_menu_button("4", "แจ้งขอวันหยุดล่วงหน้า", "ขอวันหยุดล่วงหน้า / วางแผนวันหยุด", "แจ้งขอวันหยุดล่วงหน้า", "#FFF0F6", "#EC4899"),
+        hr_menu_button("5", "แจ้งเปลี่ยนเวลาเข้า-ออกงาน", "แจ้งเปลี่ยนเวลาเข้า-ออกงานล่วงหน้า", "แจ้งเปลี่ยนเวลาเข้า-ออกงาน", "#EFF6FF", "#3B82F6"),
+        hr_menu_button("6", "แจ้งเปลี่ยนวันทำงาน", "แจ้งเปลี่ยนวันทำงาน / สลับวันทำงาน", "แจ้งเปลี่ยนวันทำงาน", "#F5F3FF", "#A855F7"),
+    ]
+    return {
+        "type": "flex",
+        "altText": "กรุณาเลือกเมนู HR",
+        "contents": {
+            "type": "bubble",
+            "size": "giga",
+            "body": {
+                "type": "box",
+                "layout": "vertical",
+                "backgroundColor": "#FFFBF7",
+                "paddingAll": "16px",
+                "spacing": "10px",
+                "contents": [
+                    {
+                        "type": "text",
+                        "text": "กรุณาเลือกเมนู HR",
+                        "weight": "bold",
+                        "size": "xl",
+                        "color": "#111827",
+                    },
+                    {
+                        "type": "text",
+                        "text": "แตะปุ่มที่ต้องการใช้งานได้เลยค่ะ",
+                        "size": "sm",
+                        "color": "#64748B",
+                        "margin": "xs",
+                    },
+                    {"type": "separator", "margin": "md"},
+                    *buttons,
+                ],
+            },
+        },
+    }
+
 
 
 def hr_request_blank(request_type: str, line_user_id: str = "") -> dict[str, Any]:

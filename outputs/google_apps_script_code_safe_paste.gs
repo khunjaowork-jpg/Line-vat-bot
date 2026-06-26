@@ -7,6 +7,7 @@ var STOCK_SPREADSHEET_ID = "1Wu3jj8iHu70DKecFuWTu6_yf8T418GBv74Mz_zOtgWQ";
 var HR_REQ = "HR_Requests";
 var HR_MED = "HR_Medical_Certificates";
 var HR_SCHEDULE = "HR_Work_Schedule";
+var HR_SCHEDULE_SPREADSHEET_ID = "1B9SOYGLbpdyuvW-44UXAfjUUGHJA8Cn1qO2O5hL1rR0";
 var HR_MEDICAL_FOLDER = "LINE HR Medical Certificates";
 var HEADERS = ["Date","Type","Invoice No","Vendor","Description","Category","Before VAT","VAT Rate","VAT","Total","Claimable","Month","Image URL","Confidence","Revenue Before VAT","Expense Before VAT","Raw Text","Document Type","LINE User ID","Submitter Name","Saved At"];
 var HR_HEADERS = ["Request ID","Submitted At","Request Type","Employee Name","Start Date","End Date","Work Date","Old Date","New Date","Old Time","New Time","Reason","Note","Status","LINE User ID","Approver Note","Updated At"];
@@ -55,8 +56,7 @@ function doPost(e) {
       return out(saveMedicalCertificate(ss, p));
     }
     if (p.action === "getHrSchedule") {
-      var schedule = ss.getSheetByName(HR_SCHEDULE);
-      return out({status: "ok", sheetName: HR_SCHEDULE, url: ss.getUrl() + "#gid=" + schedule.getSheetId()});
+      return out(getHrSchedule(ss));
     }
     var d = p.data || p;
     var row = buildRow(d);
@@ -142,6 +142,43 @@ function searchStock(branch, query) {
     }
   }
   return outRows;
+}
+
+function getHrSchedule(ss) {
+  if (HR_SCHEDULE_SPREADSHEET_ID) {
+    try {
+      var scheduleSs = SpreadsheetApp.openById(HR_SCHEDULE_SPREADSHEET_ID);
+      var target = pickCurrentScheduleSheet(scheduleSs);
+      return {
+        status: "ok",
+        sheetName: scheduleSs.getName() + " - " + target.getName(),
+        url: scheduleSs.getUrl() + "#gid=" + target.getSheetId()
+      };
+    } catch (err) {
+      // Fall back to the internal sheet so the LINE menu still works.
+    }
+  }
+  var schedule = ss.getSheetByName(HR_SCHEDULE);
+  return {status: "ok", sheetName: HR_SCHEDULE, url: ss.getUrl() + "#gid=" + schedule.getSheetId()};
+}
+
+function pickCurrentScheduleSheet(scheduleSs) {
+  var now = new Date();
+  var yy = String(now.getFullYear()).slice(-2);
+  var month = now.getMonth();
+  var shortNames = ["JAN","FEB","MAR","APR","MAY","JUN","JUL","AUG","SEP","OCT","NOV","DEC"];
+  var longNames = ["JANUARY","FEBRUARY","MARCH","APRIL","MAY","JUNE","JULY","AUGUST","SEPTEMBER","OCTOBER","NOVEMBER","DECEMBER"];
+  var candidates = [
+    shortNames[month] + yy,
+    shortNames[month] + yy + " Schedule",
+    longNames[month] + " Schedule",
+    longNames[month]
+  ];
+  for (var i = 0; i < candidates.length; i++) {
+    var sh = scheduleSs.getSheetByName(candidates[i]);
+    if (sh) return sh;
+  }
+  return scheduleSs.getSheets()[0];
 }
 
 function stockTab(branch) {
