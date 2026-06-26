@@ -1187,18 +1187,79 @@ def manual_entry_form(data: dict[str, Any]) -> str:
     )
 
 
-def confirmation_prompt(data: dict[str, Any]) -> dict[str, Any]:
-    return quick_reply_text_message(
+def confirm_edit_button(label: str, text: str, background: str, icon: str) -> dict[str, Any]:
+    return {
+        "type": "box",
+        "layout": "horizontal",
+        "cornerRadius": "24px",
+        "backgroundColor": background,
+        "paddingAll": "18px",
+        "spacing": "14px",
+        "action": {"type": "message", "label": label[:20], "text": text},
+        "contents": [
+            {
+                "type": "box",
+                "layout": "vertical",
+                "width": "52px",
+                "height": "52px",
+                "cornerRadius": "26px",
+                "backgroundColor": "#FFFFFF",
+                "alignItems": "center",
+                "justifyContent": "center",
+                "contents": [
+                    {
+                        "type": "text",
+                        "text": icon,
+                        "weight": "bold",
+                        "size": "xxl",
+                        "color": background,
+                        "align": "center",
+                    }
+                ],
+            },
+            {
+                "type": "text",
+                "text": label,
+                "weight": "bold",
+                "size": "xxl",
+                "color": "#FFFFFF",
+                "gravity": "center",
+                "wrap": True,
+                "flex": 1,
+            },
+        ],
+    }
+
+
+def confirm_edit_buttons_message() -> dict[str, Any]:
+    return {
+        "type": "flex",
+        "altText": "ยืนยันหรือแก้ไขข้อมูล",
+        "contents": {
+            "type": "bubble",
+            "size": "mega",
+            "body": {
+                "type": "box",
+                "layout": "vertical",
+                "backgroundColor": "#FFFFFF",
+                "paddingAll": "18px",
+                "spacing": "16px",
+                "contents": [
+                    confirm_edit_button("1. ยืนยัน", "1", "#10B981", "✓"),
+                    confirm_edit_button("2. แก้ไข", "2", "#8B5CF6", "✎"),
+                ],
+            },
+        },
+    }
+
+
+def confirmation_prompt(data: dict[str, Any]) -> list[dict[str, Any]]:
+    detail_text = (
         format_parsed_details(data, "บิลนำเข้า") + "\n\n"
         "กรุณาตรวจสอบข้อมูลก่อนบันทึกลง Google Sheet ค่ะ\n"
-        "เลือกปุ่มด้านล่าง หรือพิมพ์เลขตอบกลับได้เลย\n\n"
-        "1 = ยืนยันและบันทึก\n"
-        "2 = แก้ไขข้อมูล",
-        [
-            ("✅ 1 ยืนยันบันทึก", "1"),
-            ("✏️ 2 แก้ไขข้อมูล", "2"),
-        ],
+        "กดปุ่มด้านล่าง หรือพิมพ์เลข 1/2 ได้เลย"
     )
+    return [text_message(detail_text), confirm_edit_buttons_message()]
 
 
 def confirm_pending_to_google(line_user_id: str, state: dict[str, Any], public_base_url: str) -> str | list[dict[str, Any]]:

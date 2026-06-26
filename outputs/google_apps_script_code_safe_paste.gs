@@ -3,6 +3,7 @@ var TX = "Transactions_12M";
 var EX = "Expenses";
 var RV = "Revenue";
 var LOG = "Import_Log";
+var ACC_DOCS = "Accounting_Documents";
 var STOCK_SPREADSHEET_ID = "1Wu3jj8iHu70DKecFuWTu6_yf8T418GBv74Mz_zOtgWQ";
 var HR_REQ = "HR_Requests";
 var HR_MED = "HR_Medical_Certificates";
@@ -11,6 +12,7 @@ var HR_SCHEDULE_SPREADSHEET_ID = "1B9SOYGLbpdyuvW-44UXAfjUUGHJA8Cn1qO2O5hL1rR0";
 var HR_MEDICAL_FOLDER = "LINE HR Medical Certificates";
 var HR_SCHEDULE_PDF_FOLDER = "LINE HR Schedule PDFs";
 var HEADERS = ["Date","Type","Invoice No","Vendor","Description","Category","Before VAT","VAT Rate","VAT","Total","Claimable","Month","Image URL","Confidence","Revenue Before VAT","Expense Before VAT","Raw Text","Document Type","LINE User ID","Submitter Name","Saved At"];
+var ACC_DOC_HEADERS = ["Saved At","Source","Type","Document Type","Date","Invoice No","Vendor","Submitter Name","Category","Before VAT","VAT","Total","Image URL","Confidence","Raw Text","LINE User ID","Transaction Row"];
 var HR_HEADERS = ["Request ID","Submitted At","Request Type","Employee Name","Start Date","End Date","Work Date","Old Date","New Date","Old Time","New Time","Reason","Note","Status","LINE User ID","Approver Note","Updated At"];
 var HR_MED_HEADERS = ["Request ID","Uploaded At","Employee Name","Leave Date","File Name","File URL","LINE User ID"];
 var HR_SCHEDULE_HEADERS = ["Date","Branch","Employee Name","Start Time","End Time","Role","Note"];
@@ -36,6 +38,7 @@ function doPost(e) {
     ensure(ss, EX, HEADERS);
     ensure(ss, RV, HEADERS);
     ensure(ss, LOG, ["Time","Status","Invoice No","Type","Vendor","Total","Note"]);
+    ensure(ss, ACC_DOCS, ACC_DOC_HEADERS);
     ensure(ss, HR_REQ, HR_HEADERS);
     ensure(ss, HR_MED, HR_MED_HEADERS);
     ensure(ss, HR_SCHEDULE, HR_SCHEDULE_HEADERS);
@@ -63,10 +66,13 @@ function doPost(e) {
     var d = p.data || p;
     var row = buildRow(d);
     var type = normType(d.type || "Expense");
-    ss.getSheetByName(TX).appendRow(row);
+    var txSheet = ss.getSheetByName(TX);
+    txSheet.appendRow(row);
+    var txRow = txSheet.getLastRow();
     ss.getSheetByName(type === "Revenue" ? RV : EX).appendRow(row);
+    appendAccountingDocument(ss, d, type, txRow);
     log(ss, "ok", d, "");
-    return out({status: "ok", row: ss.getSheetByName(TX).getLastRow(), type: type});
+    return out({status: "ok", row: txRow, type: type});
   } catch (err) {
     return out({status: "error", message: String(err && err.message || err)});
   }
@@ -87,6 +93,29 @@ function buildRow(d) {
   var total = num(d.total || d.totalAmount || d.total_amount);
   var month = d.month || monthKey(date);
   return [date,type,d.invoiceNo || d.invoice_no || d.documentNo || d.billNo || "-",d.vendor || d.shopName || d.partner || "",d.description || "",d.category || "",beforeVat,vatRate,vat,total,d.claimable || "Yes",month,d.imageUrl || "",d.confidence || "",type === "Revenue" ? beforeVat : 0,type === "Expense" ? beforeVat : 0,d.rawText || d.raw_text || "",d.documentType || d.document_type || "",d.lineUserId || d.line_user_id || "",d.submitterName || d.submitter_name || "",new Date()];
+}
+
+function appendAccountingDocument(ss, d, type, txRow) {
+  var sh = ss.getSheetByName(ACC_DOCS);
+  sh.appendRow([
+    new Date(),
+    "LINE",
+    type,
+    d.documentType || d.document_type || "",
+    d.date || d.documentDate || "",
+    d.invoiceNo || d.invoice_no || d.documentNo || d.billNo || "-",
+    d.vendor || d.shopName || d.partner || "",
+    d.submitterName || d.submitter_name || "",
+    d.category || "",
+    num(d.beforeVat || d.before_vat || d.subtotal),
+    num(d.vat || d.vatAmount || d.vat_amount),
+    num(d.total || d.totalAmount || d.total_amount),
+    d.imageUrl || "",
+    d.confidence || "",
+    d.rawText || d.raw_text || "",
+    d.lineUserId || d.line_user_id || "",
+    txRow || ""
+  ]);
 }
 
 function searchByTotal(ss, total) {
