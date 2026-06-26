@@ -262,24 +262,23 @@ function findScheduleTableRange(sheet) {
 
 function createScheduleExportBook(sourceRange, sourceName) {
   var exportBook = SpreadsheetApp.create("LINE schedule export - " + sourceName + " - " + Utilities.getUuid());
-  var exportSheet = exportBook.getSheets()[0];
+  var sourceSheet = sourceRange.getSheet();
+  var exportSheet = sourceSheet.copyTo(exportBook).setName("Schedule");
+  var sheets = exportBook.getSheets();
+  for (var i = 0; i < sheets.length; i++) {
+    if (sheets[i].getSheetId() !== exportSheet.getSheetId()) {
+      exportBook.deleteSheet(sheets[i]);
+    }
+  }
   var numRows = sourceRange.getNumRows();
   var numCols = sourceRange.getNumColumns();
-  if (exportSheet.getMaxRows() < numRows) {
-    exportSheet.insertRowsAfter(exportSheet.getMaxRows(), numRows - exportSheet.getMaxRows());
-  }
-  if (exportSheet.getMaxColumns() < numCols) {
-    exportSheet.insertColumnsAfter(exportSheet.getMaxColumns(), numCols - exportSheet.getMaxColumns());
-  }
-  sourceRange.copyTo(exportSheet.getRange(1, 1), {contentsOnly: false});
-  var sourceSheet = sourceRange.getSheet();
   var startRow = sourceRange.getRow();
   var startCol = sourceRange.getColumn();
-  for (var c = 0; c < numCols; c++) {
-    exportSheet.setColumnWidth(c + 1, sourceSheet.getColumnWidth(startCol + c));
+  if (startCol > 1) {
+    exportSheet.deleteColumns(1, startCol - 1);
   }
-  for (var r = 0; r < numRows; r++) {
-    exportSheet.setRowHeight(r + 1, sourceSheet.getRowHeight(startRow + r));
+  if (startRow > 1) {
+    exportSheet.deleteRows(1, startRow - 1);
   }
   if (exportSheet.getMaxColumns() > numCols) {
     exportSheet.deleteColumns(numCols + 1, exportSheet.getMaxColumns() - numCols);
