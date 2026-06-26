@@ -2189,7 +2189,15 @@ def process_line_event_menu(event: dict[str, Any], public_base_url: str) -> str 
                 runtime_log(f"Get HR schedule failed: {exc}")
                 return abort_flow_message(f"เปิดตารางงานไม่สำเร็จค่ะ ({exc})")
             url = result.get("url") or result.get("spreadsheetUrl") or ""
+            pdf_url = result.get("pdfUrl") or result.get("pdf_url") or ""
             sheet_name = result.get("sheetName") or "HR_Work_Schedule"
+            if pdf_url:
+                return (
+                    "ตารางงาน PDF\n"
+                    f"{sheet_name}\n"
+                    f"{pdf_url}\n\n"
+                    f"ลิงก์ Google Sheet: {url}"
+                )
             return f"ตารางงาน\n{sheet_name}\n{url}"
         if text in {"ลาป่วย", "ลากิจ", "แจ้งขอวันหยุดล่วงหน้า", "แจ้งเปลี่ยนเวลาเข้า-ออกงาน", "แจ้งเปลี่ยนวันทำงาน"}:
             draft = hr_request_blank(text, line_user_id)

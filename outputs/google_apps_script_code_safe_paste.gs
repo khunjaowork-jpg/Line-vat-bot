@@ -9,6 +9,7 @@ var HR_MED = "HR_Medical_Certificates";
 var HR_SCHEDULE = "HR_Work_Schedule";
 var HR_SCHEDULE_SPREADSHEET_ID = "1B9SOYGLbpdyuvW-44UXAfjUUGHJA8Cn1qO2O5hL1rR0";
 var HR_MEDICAL_FOLDER = "LINE HR Medical Certificates";
+var HR_SCHEDULE_PDF_FOLDER = "LINE HR Schedule PDFs";
 var HEADERS = ["Date","Type","Invoice No","Vendor","Description","Category","Before VAT","VAT Rate","VAT","Total","Claimable","Month","Image URL","Confidence","Revenue Before VAT","Expense Before VAT","Raw Text","Document Type","LINE User ID","Submitter Name","Saved At"];
 var HR_HEADERS = ["Request ID","Submitted At","Request Type","Employee Name","Start Date","End Date","Work Date","Old Date","New Date","Old Time","New Time","Reason","Note","Status","LINE User ID","Approver Note","Updated At"];
 var HR_MED_HEADERS = ["Request ID","Uploaded At","Employee Name","Leave Date","File Name","File URL","LINE User ID"];
@@ -20,7 +21,8 @@ function doGet() {
 
 function authorizeDriveAccess() {
   var folder = getOrCreateFolder(HR_MEDICAL_FOLDER);
-  return "Drive permission ready: " + folder.getName();
+  var scheduleFolder = getOrCreateFolder(HR_SCHEDULE_PDF_FOLDER);
+  return "Drive permission ready: " + folder.getName() + ", " + scheduleFolder.getName();
 }
 
 function doPost(e) {
@@ -149,17 +151,47 @@ function getHrSchedule(ss) {
     try {
       var scheduleSs = SpreadsheetApp.openById(HR_SCHEDULE_SPREADSHEET_ID);
       var target = pickCurrentScheduleSheet(scheduleSs);
+      var pdf = createSchedulePdf(scheduleSs, target);
       return {
         status: "ok",
         sheetName: scheduleSs.getName() + " - " + target.getName(),
-        url: scheduleSs.getUrl() + "#gid=" + target.getSheetId()
+        url: scheduleSs.getUrl() + "#gid=" + target.getSheetId(),
+        pdfUrl: pdf.url,
+        pdfFileId: pdf.fileId
       };
     } catch (err) {
       // Fall back to the internal sheet so the LINE menu still works.
     }
   }
   var schedule = ss.getSheetByName(HR_SCHEDULE);
-  return {status: "ok", sheetName: HR_SCHEDULE, url: ss.getUrl() + "#gid=" + schedule.getSheetId()};
+  var fallbackPdf = createSchedulePdf(ss, schedule);
+  return {status: "ok", sheetName: HR_SCHEDULE, url: ss.getUrl() + "#gid=" + schedule.getSheetId(), pdfUrl: fallbackPdf.url, pdfFileId: fallbackPdf.fileId};
+}
+
+function createSchedulePdf(scheduleSs, sheet) {
+  var folder = getOrCreateFolder(HR_SCHEDULE_PDF_FOLDER);
+  var fileName = "ตารางงาน - " + sheet.getName() + " - " + Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "yyyyMMdd-HHmmss") + ".pdf";
+  var url = "https://docs.google.com/spreadsheets/d/" + scheduleSs.getId() + "/export" +
+    "?format=pdf" +
+    "&gid=" + sheet.getSheetId() +
+    "&portrait=false" +
+    "&size=A4" +
+    "&fitw=true" +
+    "&sheetnames=false" +
+    "&printtitle=false" +
+    "&pagenumbers=false" +
+    "&gridlines=false" +
+    "&fzr=false";
+  var response = UrlFetchApp.fetch(url, {
+    headers: {Authorization: "Bearer " + ScriptApp.getOAuthToken()},
+    muteHttpExceptions: true
+  });
+  if (response.getResponseCode() !== 200) {
+    throw new Error("export schedule PDF failed: " + response.getResponseCode());
+  }
+  var file = folder.createFile(response.getBlob().setName(fileName));
+  file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+  return {fileId: file.getId(), url: file.getUrl()};
 }
 
 function pickCurrentScheduleSheet(scheduleSs) {
