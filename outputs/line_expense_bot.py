@@ -718,16 +718,125 @@ def menu_text() -> str:
     )
 
 
-def menu_message() -> dict[str, Any]:
-    return buttons_template_message(
-        "กรุณาเลือกเมนู",
-        [
-            ("1. บิลรายรับ", "1"),
-            ("2. บิลรายจ่าย", "2"),
-            ("3. เรียกดูบัญชี", "3"),
-            ("4. ยกเลิกรายการ", "4"),
+def account_menu_button(number: str, title: str, text: str, background: str, accent: str) -> dict[str, Any]:
+    return {
+        "type": "box",
+        "layout": "horizontal",
+        "cornerRadius": "18px",
+        "backgroundColor": background,
+        "paddingAll": "16px",
+        "spacing": "14px",
+        "action": {"type": "message", "label": title[:20], "text": text},
+        "contents": [
+            {
+                "type": "box",
+                "layout": "vertical",
+                "width": "54px",
+                "height": "54px",
+                "cornerRadius": "27px",
+                "backgroundColor": accent,
+                "alignItems": "center",
+                "justifyContent": "center",
+                "contents": [
+                    {
+                        "type": "text",
+                        "text": number,
+                        "weight": "bold",
+                        "size": "xl",
+                        "color": "#FFFFFF",
+                        "align": "center",
+                    }
+                ],
+            },
+            {
+                "type": "text",
+                "text": f"{number}. {title}",
+                "weight": "bold",
+                "size": "xl",
+                "color": "#111C4E",
+                "wrap": True,
+                "gravity": "center",
+                "flex": 1,
+            },
+            {
+                "type": "text",
+                "text": ">",
+                "weight": "bold",
+                "size": "xxl",
+                "color": accent,
+                "align": "end",
+                "gravity": "center",
+                "flex": 0,
+            },
         ],
-    )
+    }
+
+
+def menu_message() -> dict[str, Any]:
+    buttons = [
+        account_menu_button("1", "บิลรายรับ", "1", "#F1F7FF", "#3B82F6"),
+        account_menu_button("2", "บิลรายจ่าย", "2", "#EFFCF8", "#10B981"),
+        account_menu_button("3", "เรียกดูบัญชี", "3", "#FFF7E8", "#F59E0B"),
+        account_menu_button("4", "ยกเลิกรายการ", "4", "#FFF1F6", "#EC4899"),
+    ]
+    return {
+        "type": "flex",
+        "altText": "กรุณาเลือกเมนูบัญชี",
+        "contents": {
+            "type": "bubble",
+            "size": "giga",
+            "body": {
+                "type": "box",
+                "layout": "vertical",
+                "backgroundColor": "#FFFFFF",
+                "paddingAll": "18px",
+                "spacing": "14px",
+                "contents": [
+                    {
+                        "type": "box",
+                        "layout": "horizontal",
+                        "cornerRadius": "18px",
+                        "backgroundColor": "#F6F0FF",
+                        "paddingAll": "16px",
+                        "spacing": "12px",
+                        "contents": [
+                            {
+                                "type": "box",
+                                "layout": "vertical",
+                                "width": "48px",
+                                "height": "48px",
+                                "cornerRadius": "24px",
+                                "backgroundColor": "#7C3AED",
+                                "alignItems": "center",
+                                "justifyContent": "center",
+                                "contents": [
+                                    {
+                                        "type": "text",
+                                        "text": "≡",
+                                        "weight": "bold",
+                                        "size": "xxl",
+                                        "color": "#FFFFFF",
+                                        "align": "center",
+                                    }
+                                ],
+                            },
+                            {
+                                "type": "text",
+                                "text": "กรุณาเลือกเมนู",
+                                "weight": "bold",
+                                "size": "xxl",
+                                "color": "#111C4E",
+                                "gravity": "center",
+                                "wrap": True,
+                                "flex": 1,
+                            },
+                        ],
+                    },
+                    *buttons,
+                ],
+            },
+        },
+    }
 
 
 def coming_soon_message(section: str) -> dict[str, Any]:
