@@ -17,6 +17,11 @@ function doGet() {
   return out({status: "ok", version: "safe-paste-2026-06-21"});
 }
 
+function authorizeDriveAccess() {
+  var folder = getOrCreateFolder(HR_MEDICAL_FOLDER);
+  return "Drive permission ready: " + folder.getName();
+}
+
 function doPost(e) {
   try {
     var p = JSON.parse(e.postData.contents || "{}");
