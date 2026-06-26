@@ -300,6 +300,7 @@ function pickCurrentScheduleSheet(scheduleSs, monthOffset) {
   var longNames = ["JANUARY","FEBRUARY","MARCH","APRIL","MAY","JUNE","JULY","AUGUST","SEPTEMBER","OCTOBER","NOVEMBER","DECEMBER"];
   var candidates = [
     shortNames[month] + yy,
+    longNames[month] + yy,
     shortNames[month] + yy + " Schedule",
     longNames[month] + " Schedule",
     longNames[month]
