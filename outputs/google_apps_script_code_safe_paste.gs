@@ -58,7 +58,7 @@ function doPost(e) {
       return out(saveMedicalCertificate(ss, p));
     }
     if (p.action === "getHrSchedule") {
-      return out(getHrSchedule(ss));
+      return out(getHrSchedule(ss, Number(p.monthOffset || 0)));
     }
     var d = p.data || p;
     var row = buildRow(d);
@@ -146,11 +146,12 @@ function searchStock(branch, query) {
   return outRows;
 }
 
-function getHrSchedule(ss) {
+function getHrSchedule(ss, monthOffset) {
+  monthOffset = Math.max(-1, Math.min(1, Number(monthOffset || 0)));
   if (HR_SCHEDULE_SPREADSHEET_ID) {
     try {
       var scheduleSs = SpreadsheetApp.openById(HR_SCHEDULE_SPREADSHEET_ID);
-      var target = pickCurrentScheduleSheet(scheduleSs);
+      var target = pickCurrentScheduleSheet(scheduleSs, monthOffset);
       var pdf = createSchedulePdf(scheduleSs, target);
       return {
         status: "ok",
@@ -177,6 +178,11 @@ function createSchedulePdf(scheduleSs, sheet) {
     "&portrait=false" +
     "&size=A4" +
     "&fitw=true" +
+    "&scale=4" +
+    "&top_margin=0.10" +
+    "&bottom_margin=0.10" +
+    "&left_margin=0.10" +
+    "&right_margin=0.10" +
     "&sheetnames=false" +
     "&printtitle=false" +
     "&pagenumbers=false" +
@@ -194,8 +200,9 @@ function createSchedulePdf(scheduleSs, sheet) {
   return {fileId: file.getId(), url: file.getUrl()};
 }
 
-function pickCurrentScheduleSheet(scheduleSs) {
+function pickCurrentScheduleSheet(scheduleSs, monthOffset) {
   var now = new Date();
+  now.setMonth(now.getMonth() + Number(monthOffset || 0));
   var yy = String(now.getFullYear()).slice(-2);
   var month = now.getMonth();
   var shortNames = ["JAN","FEB","MAR","APR","MAY","JUN","JUL","AUG","SEP","OCT","NOV","DEC"];

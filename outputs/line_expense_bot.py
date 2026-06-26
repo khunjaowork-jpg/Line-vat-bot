@@ -765,6 +765,18 @@ def stock_branch_menu_message() -> dict[str, Any]:
     )
 
 
+def schedule_month_menu_message() -> dict[str, Any]:
+    return buttons_template_message(
+        "เลือกเดือนตารางงานที่ต้องการดู",
+        [
+            ("เดือนก่อนหน้า", "ตารางงาน:-1"),
+            ("เดือนนี้", "ตารางงาน:0"),
+            ("เดือนถัดไป", "ตารางงาน:1"),
+        ],
+        title="ตารางงาน",
+    )
+
+
 def hr_menu_button(
     number: str,
     title: str,
@@ -2002,8 +2014,8 @@ def save_hr_request_to_google(data: dict[str, Any], line_user_id: str) -> dict[s
     return google_sheet_action("saveHrRequest", data=payload)
 
 
-def get_hr_schedule_link() -> dict[str, Any]:
-    return google_sheet_action("getHrSchedule")
+def get_hr_schedule_link(month_offset: int = 0) -> dict[str, Any]:
+    return google_sheet_action("getHrSchedule", monthOffset=month_offset)
 
 
 def save_medical_certificate_to_google(request_id: str, image_path: Path, line_user_id: str) -> dict[str, Any]:
@@ -2183,8 +2195,13 @@ def process_line_event_menu(event: dict[str, Any], public_base_url: str) -> str 
             return stock_branch_menu_message()
         if text == "ตารางงาน":
             clear_user_state(line_user_id)
+            return schedule_month_menu_message()
+        schedule_match = re.match(r"^ตารางงาน:([+-]?\d+)$", text)
+        if schedule_match:
+            clear_user_state(line_user_id)
+            month_offset = max(-1, min(1, int(schedule_match.group(1))))
             try:
-                result = get_hr_schedule_link()
+                result = get_hr_schedule_link(month_offset)
             except Exception as exc:
                 runtime_log(f"Get HR schedule failed: {exc}")
                 return abort_flow_message(f"เปิดตารางงานไม่สำเร็จค่ะ ({exc})")
