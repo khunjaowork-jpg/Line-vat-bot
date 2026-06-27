@@ -20,6 +20,13 @@
   "default_claimable": "Yes",
   "google_apps_script_url": "https://script.google.com/macros/s/AKfycbzpbJYKNGnlNwgz2FL_7x8V_eVzRpSqc28ydqPTTxUe_T8QCeXzMxT-YB3qSrIRCxON/exec",
   "google_apps_script_secret": "KJao-VAT-Line-2026-Secret",
+  "stock_source": "auto",
+  "qashier": {
+    "inventory_url_env": "QASHIER_INVENTORY_API_URL",
+    "api_token_env": "QASHIER_API_TOKEN",
+    "store_id_env": "QASHIER_STORE_ID",
+    "timeout_seconds": 20
+  },
   "line": {
     "channel_secret_env": "LINE_CHANNEL_SECRET",
     "channel_access_token_env": "LINE_CHANNEL_ACCESS_TOKEN",

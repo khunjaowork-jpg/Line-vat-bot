@@ -12,6 +12,7 @@ import os
 import re
 import sys
 import uuid
+import urllib.parse
 import urllib.request
 from urllib.parse import unquote
 from http import HTTPStatus
@@ -2184,8 +2185,122 @@ def search_google_sheet_by_total(total: Any) -> list[dict[str, Any]]:
 
 
 def search_stock_product(branch: str, query: str) -> list[dict[str, Any]]:
+    source = str(CONFIG.get("stock_source") or "auto").lower()
+    if source in {"qashier", "auto"}:
+        try:
+            return search_qashier_stock(branch, query)
+        except Exception as exc:
+            runtime_log(f"Qashier stock search skipped/failed: {exc}")
+            if source == "qashier":
+                raise
+
     result = google_sheet_action("searchStock", branch=branch, query=query)
-    return list(result.get("matches") or [])
+    matches = list(result.get("matches") or [])
+    for item in matches:
+        item.setdefault("source", "Google Sheet")
+    return matches
+
+
+def qashier_config() -> dict[str, Any]:
+    return dict(CONFIG.get("qashier") or {})
+
+
+def qashier_env(config_key: str, default: str = "") -> str:
+    env_name = qashier_config().get(config_key)
+    if not env_name:
+        return default
+    return os.getenv(str(env_name), default)
+
+
+def search_qashier_stock(branch: str, query: str) -> list[dict[str, Any]]:
+    cfg = qashier_config()
+    url = qashier_env("inventory_url_env")
+    token = qashier_env("api_token_env")
+    store_id = qashier_env("store_id_env")
+    if not url or not token:
+        raise RuntimeError("missing Qashier inventory API URL or token")
+
+    params = {
+        "q": query,
+        "query": query,
+        "keyword": query,
+        "barcode": query,
+        "branch": branch,
+        "storeId": store_id,
+        "store_id": store_id,
+    }
+    clean_params = {k: v for k, v in params.items() if v}
+    separator = "&" if "?" in url else "?"
+    endpoint = f"{url}{separator}{urllib.parse.urlencode(clean_params)}"
+    request = urllib.request.Request(
+        endpoint,
+        headers={
+            "Accept": "application/json",
+            "Authorization": f"Bearer {token}",
+            "User-Agent": "LineVatBot/2.0",
+        },
+        method="GET",
+    )
+    timeout = int(cfg.get("timeout_seconds") or 20)
+    with urllib.request.urlopen(request, timeout=timeout) as response:
+        payload = json.loads(response.read().decode("utf-8"))
+    return normalize_qashier_stock_items(payload, branch)
+
+
+def normalize_qashier_stock_items(payload: Any, branch: str) -> list[dict[str, Any]]:
+    if isinstance(payload, dict):
+        raw_items = (
+            payload.get("items")
+            or payload.get("products")
+            or payload.get("inventory")
+            or payload.get("results")
+            or payload.get("data")
+            or []
+        )
+    else:
+        raw_items = payload
+    if isinstance(raw_items, dict):
+        raw_items = (
+            raw_items.get("items")
+            or raw_items.get("products")
+            or raw_items.get("inventory")
+            or raw_items.get("results")
+            or []
+        )
+    if not isinstance(raw_items, list):
+        return []
+
+    def pick(item: dict[str, Any], *keys: str) -> Any:
+        for key in keys:
+            value = item.get(key)
+            if value not in (None, ""):
+                return value
+        return ""
+
+    normalized: list[dict[str, Any]] = []
+    for item in raw_items:
+        if not isinstance(item, dict):
+            continue
+        stock_value = pick(
+            item,
+            "stock",
+            "quantity",
+            "qty",
+            "availableQty",
+            "available_quantity",
+            "inventoryQuantity",
+        )
+        normalized.append(
+            {
+                "name": pick(item, "name", "productName", "product_name", "title"),
+                "price": pick(item, "price", "sellingPrice", "selling_price", "retailPrice"),
+                "barcode": pick(item, "barcode", "sku", "code", "productCode"),
+                "stock": stock_value,
+                "branch": pick(item, "branch", "storeName", "store_name") or branch,
+                "source": "Qashier HQ",
+            }
+        )
+    return normalized
 
 
 def format_stock_results(branch: str, query: str, matches: list[dict[str, Any]]) -> str:
