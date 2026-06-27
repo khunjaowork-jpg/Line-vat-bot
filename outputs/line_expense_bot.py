@@ -673,46 +673,46 @@ def append_import_log(log, image_path: Path, data: dict[str, Any], status: str, 
     log.cell(row=log_row, column=9, value=data.get("document_type", ""))
 
 
-def format_parsed_details(data: dict[str, Any], heading: str = "เธเธดเธฅเธเธณเน€เธเนเธฒ") -> str:
+def format_parsed_details(data: dict[str, Any], heading: str = "บิลนำเข้า") -> str:
     return (
         f"==== {heading} ====\n"
-        f"เธเธฃเธฐเน€เธ เธ—: {data.get('transaction_type', '-')}\n"
-        f"เธเธฃเธฐเน€เธ เธ—เน€เธญเธเธชเธฒเธฃ: {data.get('document_type') or '-'}\n"
-        f"เธงเธฑเธเธ—เธตเน: {data.get('date')}\n"
-        f"เน€เธฅเธเธ—เธตเนเธเธดเธฅ: {data.get('invoice_no') or '-'}\n"
-        f"เธเธทเนเธญเธฃเนเธฒเธ/เธเธนเนเธเนเธฒ: {data.get('vendor') or '-'}\n"
-        f"เธเธนเนเธเธณเธชเนเธเน€เธญเธเธชเธฒเธฃ: {data.get('submitter_name') or '-'}\n"
-        f"เธซเธกเธงเธ”: {data.get('category') or '-'}\n"
-        f"เธขเธญเธ”เธเนเธญเธ VAT: {float(data.get('before_vat') or 0):,.2f}\n"
+        f"ประเภท: {data.get('transaction_type', '-')}\n"
+        f"ประเภทเอกสาร: {data.get('document_type') or '-'}\n"
+        f"วันที่: {data.get('date')}\n"
+        f"เลขที่บิล: {data.get('invoice_no') or '-'}\n"
+        f"ชื่อร้าน/คู่ค้า: {data.get('vendor') or '-'}\n"
+        f"ผู้นำส่งเอกสาร: {data.get('submitter_name') or '-'}\n"
+        f"หมวด: {data.get('category') or '-'}\n"
+        f"ยอดก่อน VAT: {float(data.get('before_vat') or 0):,.2f}\n"
         f"VAT: {float(data.get('vat') or 0):,.2f}\n"
-        f"เธ เธฒเธฉเธตเธซเธฑเธ เธ“ เธ—เธตเนเธเนเธฒเธข: {float(data.get('withholding_tax') or 0):,.2f}\n"
-        f"เธขเธญเธ”เธฃเธงเธก: {float(data.get('total') or 0):,.2f}\n"
-        f"เธเธงเธฒเธกเธกเธฑเนเธเนเธ OCR: {float(data.get('confidence') or 0):.0%}"
+        f"ภาษีหัก ณ ที่จ่าย: {float(data.get('withholding_tax') or 0):,.2f}\n"
+        f"ยอดรวม: {float(data.get('total') or 0):,.2f}\n"
+        f"ความมั่นใจ OCR: {float(data.get('confidence') or 0):.0%}"
     )
 
 
 def confirmation_prompt(data: dict[str, Any]) -> str:
     return (
-        format_parsed_details(data, "เธเธดเธฅเธเธณเน€เธเนเธฒ") + "\n\n"
-        "เธเธฃเธธเธ“เธฒเธ•เธฃเธงเธเธชเธญเธเธเนเธญเธกเธนเธฅเธเนเธญเธเธเธฑเธเธ—เธถเธเธฅเธ Excel\n"
-        "เธ–เนเธฒเธ–เธนเธเธ•เนเธญเธ เธเธดเธกเธเน: เธ•เธฃเธงเธเธชเธญเธเนเธฅเธฐเธขเธทเธเธขเธฑเธ\n"
-        "เธ–เนเธฒเธ•เนเธญเธเธเธฒเธฃเนเธเนเนเธ เธเธดเธกเธเน: เนเธเนเนเธ"
+        format_parsed_details(data, "บิลนำเข้า") + "\n\n"
+        "กรุณาตรวจสอบข้อมูลก่อนบันทึกลง Google Sheet\n"
+        "ตอบ 1 = ยืนยันและบันทึก\n"
+        "ตอบ 2 = แก้ไขข้อมูล"
     )
 
 
 def correction_form(data: dict[str, Any]) -> str:
     return (
-        "เธเธฃเธธเธ“เธฒเนเธเนเนเธเธเนเธญเธกเธนเธฅเนเธเนเธเธเธเธญเธฃเนเธกเธเธตเน เนเธฅเนเธงเธชเนเธเธเธฅเธฑเธเธกเธฒเนเธ”เนเน€เธฅเธขเธเนเธฐ\n\n"
-        f"เธเธฃเธฐเน€เธ เธ—เน€เธญเธเธชเธฒเธฃ: {data.get('document_type') or ''}\n"
-        f"เธงเธฑเธเธ—เธตเน: {data.get('date') or ''}\n"
-        f"เน€เธฅเธเธ—เธตเนเธเธดเธฅ: {normalize_invoice_no(data.get('invoice_no'))}\n"
-        f"เธเธทเนเธญเธฃเนเธฒเธ/เธเธนเนเธเนเธฒ: {data.get('vendor') or ''}\n"
-        f"เธเธนเนเธเธณเธชเนเธเน€เธญเธเธชเธฒเธฃ: {data.get('submitter_name') or ''}\n"
-        f"เธซเธกเธงเธ”: {data.get('category') or ''}\n"
-        f"เธขเธญเธ”เธเนเธญเธ VAT: {float(data.get('before_vat') or 0):.2f}\n"
+        "กรุณาแก้ไขข้อมูลในแบบฟอร์มนี้ แล้วส่งกลับมาได้เลยค่ะ\n\n"
+        f"ประเภทเอกสาร: {data.get('document_type') or ''}\n"
+        f"วันที่: {data.get('date') or ''}\n"
+        f"เลขที่บิล: {normalize_invoice_no(data.get('invoice_no'))}\n"
+        f"ชื่อร้าน/คู่ค้า: {data.get('vendor') or ''}\n"
+        f"ผู้นำส่งเอกสาร: {data.get('submitter_name') or ''}\n"
+        f"หมวด: {data.get('category') or ''}\n"
+        f"ยอดก่อน VAT: {float(data.get('before_vat') or 0):.2f}\n"
         f"VAT: {float(data.get('vat') or 0):.2f}\n"
-        f"เธ เธฒเธฉเธตเธซเธฑเธ เธ“ เธ—เธตเนเธเนเธฒเธข: {float(data.get('withholding_tax') or 0):.2f}\n"
-        f"เธขเธญเธ”เธฃเธงเธก: {float(data.get('total') or 0):.2f}"
+        f"ภาษีหัก ณ ที่จ่าย: {float(data.get('withholding_tax') or 0):.2f}\n"
+        f"ยอดรวม: {float(data.get('total') or 0):.2f}"
     )
 
 
@@ -1454,18 +1454,18 @@ def blank_manual_entry(transaction_type: str) -> dict[str, Any]:
 
 def manual_entry_form(data: dict[str, Any]) -> str:
     return (
-        "OCR เธญเนเธฒเธเน€เธญเธเธชเธฒเธฃเนเธกเนเธชเธณเน€เธฃเนเธเธซเธฃเธทเธญเนเธเนเน€เธงเธฅเธฒเธเธฒเธเน€เธเธดเธเนเธเธเนเธฐ\n"
-        "เธเธฃเธธเธ“เธฒเธเธฃเธญเธเธฃเธฒเธขเธฅเธฐเน€เธญเธตเธขเธ”เธ•เธฒเธกเนเธเธเธเธญเธฃเนเธกเธเธตเน เนเธฅเนเธงเธชเนเธเธเธฅเธฑเธเธกเธฒเนเธ”เนเน€เธฅเธขเธเนเธฐ\n\n"
-        f"เธเธฃเธฐเน€เธ เธ—เน€เธญเธเธชเธฒเธฃ: {data.get('document_type') or ''}\n"
-        f"เธงเธฑเธเธ—เธตเน: {data.get('date') or ''}\n"
-        f"เน€เธฅเธเธ—เธตเนเธเธดเธฅ: {normalize_invoice_no(data.get('invoice_no'))}\n"
-        f"เธเธทเนเธญเธฃเนเธฒเธ/เธเธนเนเธเนเธฒ: {data.get('vendor') or ''}\n"
-        f"เธเธนเนเธเธณเธชเนเธเน€เธญเธเธชเธฒเธฃ: {data.get('submitter_name') or ''}\n"
-        f"เธซเธกเธงเธ”: {data.get('category') or ''}\n"
-        f"เธขเธญเธ”เธเนเธญเธ VAT: {float(data.get('before_vat') or 0):.2f}\n"
+        "OCR อ่านเอกสารไม่สำเร็จหรือใช้เวลานานเกินไปค่ะ\n"
+        "กรุณากรอกรายละเอียดตามแบบฟอร์มนี้ แล้วส่งกลับมาได้เลยค่ะ\n\n"
+        f"ประเภทเอกสาร: {data.get('document_type') or ''}\n"
+        f"วันที่: {data.get('date') or ''}\n"
+        f"เลขที่บิล: {normalize_invoice_no(data.get('invoice_no'))}\n"
+        f"ชื่อร้าน/คู่ค้า: {data.get('vendor') or ''}\n"
+        f"ผู้นำส่งเอกสาร: {data.get('submitter_name') or ''}\n"
+        f"หมวด: {data.get('category') or ''}\n"
+        f"ยอดก่อน VAT: {float(data.get('before_vat') or 0):.2f}\n"
         f"VAT: {float(data.get('vat') or 0):.2f}\n"
-        f"เธ เธฒเธฉเธตเธซเธฑเธ เธ“ เธ—เธตเนเธเนเธฒเธข: {float(data.get('withholding_tax') or 0):.2f}\n"
-        f"เธขเธญเธ”เธฃเธงเธก: {float(data.get('total') or 0):.2f}"
+        f"ภาษีหัก ณ ที่จ่าย: {float(data.get('withholding_tax') or 0):.2f}\n"
+        f"ยอดรวม: {float(data.get('total') or 0):.2f}"
     )
 
 
@@ -1559,9 +1559,9 @@ def approval_buttons_message(request_id: str) -> dict[str, Any]:
 
 def confirmation_prompt(data: dict[str, Any]) -> list[dict[str, Any]]:
     detail_text = (
-        format_parsed_details(data, "เธเธดเธฅเธเธณเน€เธเนเธฒ") + "\n\n"
-        "เธเธฃเธธเธ“เธฒเธ•เธฃเธงเธเธชเธญเธเธเนเธญเธกเธนเธฅเธเนเธญเธเธเธฑเธเธ—เธถเธเธฅเธ Google Sheet เธเนเธฐ\n"
-        "เธเธ”เธเธธเนเธกเธ”เนเธฒเธเธฅเนเธฒเธ เธซเธฃเธทเธญเธเธดเธกเธเนเน€เธฅเธ 1/2 เนเธ”เนเน€เธฅเธข"
+        format_parsed_details(data, "บิลนำเข้า") + "\n\n"
+        "กรุณาตรวจสอบข้อมูลก่อนบันทึกลง Google Sheet ค่ะ\n"
+        "กดปุ่มด้านล่าง หรือพิมพ์เลข 1/2 ได้เลย"
     )
     return [text_message(detail_text), confirm_edit_buttons_message()]
 
@@ -1572,7 +1572,7 @@ def confirm_pending_to_google(line_user_id: str, state: dict[str, Any], public_b
         state["mode"] = "awaiting_submitter_name"
         state["pending_data"] = serialize_data(pending)
         set_user_state(line_user_id, state)
-        return "เธเธฃเธธเธ“เธฒเธฃเธฐเธเธธเธเธทเนเธญเธเธนเนเธเธณเธชเนเธเน€เธญเธเธชเธฒเธฃเธเนเธญเธเธเธฑเธเธ—เธถเธเธเนเธฐ"
+        return "กรุณาระบุชื่อผู้นำส่งเอกสารก่อนบันทึกค่ะ"
     if not state.get("duplicate_checked"):
         try:
             matches = search_google_sheet_by_total(pending.get("total"))
@@ -1599,11 +1599,11 @@ def confirm_pending_to_google(line_user_id: str, state: dict[str, Any], public_b
     except Exception as exc:
         runtime_log(f"Google Sheet save failed: {exc}")
         clear_user_state(line_user_id)
-        return abort_flow_message(f"Google Sheet: เธขเธฑเธเนเธกเนเธชเธณเน€เธฃเนเธ ({exc})")
+        return abort_flow_message(f"Google Sheet: ยังไม่สำเร็จ ({exc})")
     notify_accounting_import_approver(pending, line_user_id)
-    summary_image = render_row_summary_image("Google Sheet", "-", pending, "เธเธดเธฅเธเธณเน€เธเนเธฒ")
+    summary_image = render_row_summary_image("Google Sheet", "-", pending, "บิลนำเข้า")
     messages = [
-        text_message("เธเธฑเธเธ—เธถเธเน€เธฃเธตเธขเธเธฃเนเธญเธข\nGoogle Sheet: เธเธฑเธเธ—เธถเธเธชเธณเน€เธฃเนเธ"),
+        text_message("บันทึกเรียบร้อย\nGoogle Sheet: บันทึกสำเร็จ"),
         image_message(public_file_url(public_base_url, summary_image)),
     ]
     substitute_match_data = substitute_match_from_pending(pending, result)
@@ -1905,18 +1905,18 @@ def render_row_summary_image(sheet_name: str, row: int, data: dict[str, Any], he
     draw.text((width - 440, 62), f"{sheet_name}!Row {row}", fill="#374151", font=small_font)
 
     fields = [
-        ("เธเธฃเธฐเน€เธ เธ—", data.get("transaction_type", "-")),
-        ("เธเธฃเธฐเน€เธ เธ—เน€เธญเธเธชเธฒเธฃ", data.get("document_type") or "-"),
-        ("เธงเธฑเธเธ—เธตเน", str(data.get("date", "-"))),
-        ("เน€เธฅเธเธ—เธตเนเธเธดเธฅ", data.get("invoice_no") or "-"),
-        ("เธเธทเนเธญเธฃเนเธฒเธ/เธเธนเนเธเนเธฒ", data.get("vendor") or "-"),
-        ("เธเธนเนเธเธณเธชเนเธเน€เธญเธเธชเธฒเธฃ", data.get("submitter_name") or "-"),
-        ("เธซเธกเธงเธ”", data.get("category") or "-"),
-        ("เธฃเธฒเธขเธฅเธฐเน€เธญเธตเธขเธ”", data.get("description") or "-"),
-        ("เธขเธญเธ”เธเนเธญเธ VAT", f"{float(data.get('before_vat') or 0):,.2f}"),
+        ("ประเภท", data.get("transaction_type", "-")),
+        ("ประเภทเอกสาร", data.get("document_type") or "-"),
+        ("วันที่", str(data.get("date", "-"))),
+        ("เลขที่บิล", data.get("invoice_no") or "-"),
+        ("ชื่อร้าน/คู่ค้า", data.get("vendor") or "-"),
+        ("ผู้นำส่งเอกสาร", data.get("submitter_name") or "-"),
+        ("หมวด", data.get("category") or "-"),
+        ("รายละเอียด", data.get("description") or "-"),
+        ("ยอดก่อน VAT", f"{float(data.get('before_vat') or 0):,.2f}"),
         ("VAT", f"{float(data.get('vat') or 0):,.2f}"),
-        ("เธ เธฒเธฉเธตเธซเธฑเธ เธ“ เธ—เธตเนเธเนเธฒเธข", f"{float(data.get('withholding_tax') or 0):,.2f}"),
-        ("เธขเธญเธ”เธฃเธงเธก", f"{float(data.get('total') or 0):,.2f}"),
+        ("ภาษีหัก ณ ที่จ่าย", f"{float(data.get('withholding_tax') or 0):,.2f}"),
+        ("ยอดรวม", f"{float(data.get('total') or 0):,.2f}"),
     ]
     y = 155
     for label, value in fields:
@@ -3258,16 +3258,16 @@ def process_line_event_menu(event: dict[str, Any], public_base_url: str) -> str 
         if state.get("mode") == "awaiting_cancel_total":
             amount = normalize_amount(text)
             if amount is None:
-                return "เธเธฃเธธเธ“เธฒเธเธดเธกเธเนเธขเธญเธ”เธฃเธงเธกเธชเธธเธ—เธเธดเธซเธฃเธทเธญเธขเธญเธ”เธเนเธญเธ VAT เธ—เธตเนเธ•เนเธญเธเธเธฒเธฃเธขเธเน€เธฅเธดเธ เน€เธเนเธ 2251.72"
+                return "กรุณาพิมพ์ยอดรวมสุทธิหรือยอดก่อน VAT ที่ต้องการยกเลิก เช่น 2251.72"
             try:
                 matches = search_google_sheet_by_total(amount)
             except Exception as exc:
                 runtime_log(f"Cancel search failed: {exc}")
                 clear_user_state(line_user_id)
-                return abort_flow_message(f"เธเนเธเธซเธฒเธฃเธฒเธขเธเธฒเธฃเนเธกเนเธชเธณเน€เธฃเนเธเธเนเธฐ ({exc})")
+                return abort_flow_message(f"ค้นหารายการไม่สำเร็จค่ะ ({exc})")
             if not matches:
                 clear_user_state(line_user_id)
-                return f"เนเธกเนเธเธเธฃเธฒเธขเธเธฒเธฃเธ—เธตเนเธกเธตเธขเธญเธ” {amount:,.2f} เธเนเธฐ เธเธฃเธธเธ“เธฒเธ•เธฃเธงเธเธชเธญเธเธงเนเธฒเธขเธญเธ”เธเธตเนเธ•เธฃเธเธเธฑเธเธขเธญเธ”เธฃเธงเธกเธชเธธเธ—เธเธดเธซเธฃเธทเธญเธขเธญเธ”เธเนเธญเธ VAT เนเธ Google Sheet"
+                return f"ไม่พบรายการที่มียอด {amount:,.2f} ค่ะ กรุณาตรวจสอบว่ายอดนี้ตรงกับยอดรวมสุทธิหรือยอดก่อน VAT ใน Google Sheet"
             if len(matches) == 1:
                 state["mode"] = "awaiting_cancel_confirm"
                 state["cancel_row"] = int(matches[0]["row"])
@@ -3438,11 +3438,11 @@ def process_line_event_menu(event: dict[str, Any], public_base_url: str) -> str 
                 found = find_transaction_by_row(wanted_row)
                 clear_user_state(line_user_id)
                 if not found:
-                    return f"เนเธกเนเธเธ Row {wanted_row} เนเธ Excel เธเนเธฐ"
+                    return f"ไม่พบ Row {wanted_row} ใน Google Sheet ค่ะ"
                 sheet_name, row, data = found
-                image_path = render_row_summary_image(sheet_name, row, data, "เธฃเธฒเธขเธฅเธฐเน€เธญเธตเธขเธ”เธเธฑเธเธเธต")
+                image_path = render_row_summary_image(sheet_name, row, data, "รายละเอียดบัญชี")
                 return [
-                    text_message(f"เธเธเธฃเธฒเธขเธฅเธฐเน€เธญเธตเธขเธ”เธ—เธตเน {sheet_name}!Row {row}"),
+                    text_message(f"พบรายละเอียดที่ {sheet_name}!Row {row}"),
                     image_message(public_file_url(public_base_url, image_path)),
                 ]
 
@@ -3462,12 +3462,12 @@ def process_line_event_menu(event: dict[str, Any], public_base_url: str) -> str 
 
             clear_user_state(line_user_id)
             sheet_name, row, data = results[0]
-            image_path = render_row_summary_image(sheet_name, row, data, "เธฃเธฒเธขเธฅเธฐเน€เธญเธตเธขเธ”เธเธฑเธเธเธต")
+            image_path = render_row_summary_image(sheet_name, row, data, "รายละเอียดบัญชี")
             return [
-                text_message(f"เธเธเธฃเธฒเธขเธฅเธฐเน€เธญเธตเธขเธ”เธเธฒเธเธเธณเธเนเธ {text} เธ—เธตเน {sheet_name}!Row {row}"),
+                text_message(f"พบรายละเอียดจากคำค้น {text} ที่ {sheet_name}!Row {row}"),
                 image_message(public_file_url(public_base_url, image_path)),
             ]
-        if text == "เธ•เธฃเธงเธเธชเธญเธเนเธฅเธฐเธขเธทเธเธขเธฑเธ":
+        if text in {"ตรวจสอบและยืนยัน", "เธ•เธฃเธงเธเธชเธญเธเนเธฅเธฐเธขเธทเธเธขเธฑเธ"}:
             if state.get("mode") != "awaiting_confirmation" or not state.get("pending_data"):
                 return "เธขเธฑเธเนเธกเนเธกเธตเธเธดเธฅเธ—เธตเนเธฃเธญเธขเธทเธเธขเธฑเธเธเนเธฐ เธเธฃเธธเธ“เธฒเน€เธฅเธทเธญเธเน€เธกเธเธน เธเธดเธฅเธฃเธฒเธขเธฃเธฑเธ เธซเธฃเธทเธญ เธเธดเธฅเธฃเธฒเธขเธเนเธฒเธข เธเนเธญเธ"
             pending = deserialize_data(state["pending_data"])
@@ -3482,12 +3482,12 @@ def process_line_event_menu(event: dict[str, Any], public_base_url: str) -> str 
             except Exception as exc:
                 runtime_log(f"Google Sheet save failed: {exc}")
                 clear_user_state(line_user_id)
-                return abort_flow_message(f"Google Sheet: เธขเธฑเธเนเธกเนเธชเธณเน€เธฃเนเธ ({exc})")
+                return abort_flow_message(f"Google Sheet: ยังไม่สำเร็จ ({exc})")
             notify_accounting_import_approver(pending, line_user_id)
             clear_user_state(line_user_id)
-            summary_image = render_row_summary_image(sheet_name, row, pending, "เธเธดเธฅเธเธณเน€เธเนเธฒ")
+            summary_image = render_row_summary_image(sheet_name, row, pending, "บิลนำเข้า")
             messages = [
-                text_message("เธเธฑเธเธ—เธถเธเน€เธฃเธตเธขเธเธฃเนเธญเธข\nGoogle Sheet: เธเธฑเธเธ—เธถเธเธชเธณเน€เธฃเนเธ"),
+                text_message("บันทึกเรียบร้อย\nGoogle Sheet: บันทึกสำเร็จ"),
                 image_message(public_file_url(public_base_url, summary_image)),
             ]
             substitute_match_data = substitute_match_from_pending(pending, result)
