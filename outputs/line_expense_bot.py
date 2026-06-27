@@ -792,9 +792,23 @@ EXPENSE_CATEGORIES = [
 ]
 
 REVENUE_CATEGORIES = [
+    ("ยอดขายหน้าสาขา", "#DCFCE7", "#22C55E", "สาขา"),
+    ("ยอดขายส่ง", "#DBEAFE", "#3B82F6", "ส่ง"),
+    ("อื่นๆ", "#F1F5F9", "#64748B", "..."),
+]
+
+REVENUE_BRANCHES = [
+    ("สี่แยก", "#DBEAFE", "#3B82F6", "1"),
+    ("พัสดุสี่แยก", "#FEF3C7", "#F59E0B", "2"),
+    ("ทะเล", "#CCFBF1", "#14B8A6", "3"),
+    ("เขาใหญ่", "#DCFCE7", "#22C55E", "4"),
+    ("ภูเก็ต", "#EDE9FE", "#8B5CF6", "5"),
+]
+
+REVENUE_PAYMENT_CHANNELS = [
     ("ยอดขายเงินสด", "#DCFCE7", "#22C55E", "เงิน"),
     ("ยอดเงินโอน", "#DBEAFE", "#3B82F6", "โอน"),
-    ("ยอดเครดิต", "#FEF3C7", "#F59E0B", "บัตร"),
+    ("ยอดบัตรเครดิต", "#FEF3C7", "#F59E0B", "บัตร"),
     ("อื่นๆ", "#F1F5F9", "#64748B", "..."),
 ]
 
@@ -908,11 +922,143 @@ def category_menu_message(transaction_type: str) -> dict[str, Any]:
     }
 
 
+def simple_choice_menu(title: str, action_prefix: str, items: list[tuple[str, str, str, str]], accent: str = "#2563EB") -> dict[str, Any]:
+    return {
+        "type": "flex",
+        "altText": title,
+        "contents": {
+            "type": "bubble",
+            "size": "giga",
+            "body": {
+                "type": "box",
+                "layout": "vertical",
+                "backgroundColor": "#FFFFFF",
+                "paddingAll": "18px",
+                "spacing": "12px",
+                "contents": [
+                    {
+                        "type": "box",
+                        "layout": "horizontal",
+                        "cornerRadius": "18px",
+                        "backgroundColor": "#F8FAFC",
+                        "borderColor": accent,
+                        "borderWidth": "2px",
+                        "paddingAll": "16px",
+                        "contents": [
+                            {
+                                "type": "text",
+                                "text": title,
+                                "weight": "bold",
+                                "size": "xl",
+                                "color": "#111C4E",
+                                "wrap": True,
+                            }
+                        ],
+                    },
+                    {
+                        "type": "box",
+                        "layout": "vertical",
+                        "cornerRadius": "18px",
+                        "backgroundColor": "#FFFFFF",
+                        "paddingAll": "8px",
+                        "spacing": "8px",
+                        "contents": [
+                            category_menu_item("Revenue", label, bg, item_accent, icon) | {
+                                "action": {"type": "message", "label": label[:20], "text": f"{action_prefix}:{label}"}
+                            }
+                            for label, bg, item_accent, icon in items
+                        ],
+                    },
+                ],
+            },
+        },
+    }
+
+
+def revenue_branch_menu_message() -> dict[str, Any]:
+    return simple_choice_menu("กรุณาเลือกสาขา", "REV_BRANCH", REVENUE_BRANCHES)
+
+
+def revenue_payment_menu_message() -> dict[str, Any]:
+    return simple_choice_menu("กรุณาเลือกช่องทางรายรับ", "REV_PAYMENT", REVENUE_PAYMENT_CHANNELS, "#8B5CF6")
+
+
+def continue_document_menu_message() -> dict[str, Any]:
+    return simple_choice_menu(
+        "ต้องการส่งเอกสารในรายการเดิมต่อหรือไม่",
+        "DOC_CONTINUE",
+        [
+            ("ส่งเอกสารต่อ", "#DCFCE7", "#22C55E", "1"),
+            ("ตรวจสอบและยืนยัน", "#EDE9FE", "#8B5CF6", "2"),
+        ],
+        "#10B981",
+    )
+
+
 def ask_for_receipt_after_category(category: str) -> str:
     return (
         f"เลือกหมวดหมู่: {category}\n\n"
         "ส่งเอกสารเพื่อบันทึกรายละเอียดในระบบได้เลยค่ะ"
     )
+
+
+def format_revenue_payment_summary(payments: dict[str, Any]) -> str:
+    lines = []
+    for name, amount in payments.items():
+        try:
+            value = float(amount or 0)
+        except (TypeError, ValueError):
+            value = 0
+        if value:
+            lines.append(f"- {name}: {value:,.2f}")
+    return "\n".join(lines) if lines else "-"
+
+
+def apply_revenue_payments_to_data(data: dict[str, Any], state: dict[str, Any]) -> dict[str, Any]:
+    payments = dict(state.get("revenue_payments") or {})
+    if not payments:
+        return data
+    total = round(sum(float(value or 0) for value in payments.values()), 2)
+    branch = str(state.get("revenue_branch") or "")
+    category = str(state.get("category") or "ยอดขายหน้าสาขา")
+    updated = dict(data)
+    updated["transaction_type"] = "Revenue"
+    updated["category"] = f"{category} - {branch}" if branch else category
+    updated["description"] = " / ".join(f"{name} {float(value or 0):,.2f}" for name, value in payments.items() if float(value or 0))
+    updated["before_vat"] = total
+    updated["vat"] = 0
+    updated["total"] = total
+    updated["claimable"] = "Yes"
+    updated["revenue_branch"] = branch
+    updated["revenue_payments"] = payments
+    return updated
+
+
+def append_document_path_to_state(state: dict[str, Any], image_path: Path) -> list[str]:
+    paths = list(state.get("document_paths") or [])
+    text_path = str(image_path)
+    if text_path not in paths:
+        paths.append(text_path)
+    state["document_paths"] = paths
+    return paths
+
+
+def notify_accounting_import_approver(data: dict[str, Any], line_user_id: str) -> None:
+    approver_id = str(CONFIG.get("hr_approver_line_id") or os.getenv("HR_APPROVER_LINE_ID") or "Ud260925c43fb0823fea42224a2929393")
+    if not approver_id:
+        return
+    message = (
+        "มีรายการบัญชีใหม่บันทึกเข้าระบบแล้ว\n\n"
+        f"ประเภท: {data.get('transaction_type') or '-'}\n"
+        f"หมวด: {data.get('category') or '-'}\n"
+        f"ร้าน/คู่ค้า: {data.get('vendor') or '-'}\n"
+        f"ยอดรวม: {float(data.get('total') or 0):,.2f}\n"
+        f"ผู้นำส่ง: {data.get('submitter_name') or line_user_id or '-'}"
+    )
+    try:
+        push_line_messages(approver_id, [text_message(message)])
+    except Exception as exc:
+        runtime_log(f"Accounting approver notification failed: {exc}")
 
 
 def menu_message() -> dict[str, Any]:
@@ -1454,6 +1600,7 @@ def confirm_pending_to_google(line_user_id: str, state: dict[str, Any], public_b
         runtime_log(f"Google Sheet save failed: {exc}")
         clear_user_state(line_user_id)
         return abort_flow_message(f"Google Sheet: เธขเธฑเธเนเธกเนเธชเธณเน€เธฃเนเธ ({exc})")
+    notify_accounting_import_approver(pending, line_user_id)
     summary_image = render_row_summary_image("Google Sheet", "-", pending, "เธเธดเธฅเธเธณเน€เธเนเธฒ")
     messages = [
         text_message("เธเธฑเธเธ—เธถเธเน€เธฃเธตเธขเธเธฃเนเธญเธข\nGoogle Sheet: เธเธฑเธเธ—เธถเธเธชเธณเน€เธฃเนเธ"),
@@ -2277,6 +2424,7 @@ def build_google_sheet_payload(data: dict[str, Any], image_path: Path, line_user
     else:
         date_text = str(date_value)
         month_text = str(date_value)[:7]
+    document_paths = [str(path) for path in data.get("document_paths") or []]
     return {
         "secret": CONFIG.get("google_apps_script_secret", ""),
         "date": date_text,
@@ -2305,6 +2453,10 @@ def build_google_sheet_payload(data: dict[str, Any], image_path: Path, line_user
         "image_mime_type": image_mime_type,
         "imageData": image_data,
         "image_data": image_data,
+        "documentImages": document_paths,
+        "document_images": document_paths,
+        "documentCount": len(document_paths) or (1 if image_file_name else 0),
+        "document_count": len(document_paths) or (1 if image_file_name else 0),
         "confidence": data.get("confidence", ""),
         "rawText": data.get("raw_text", ""),
         "raw_text": data.get("raw_text", ""),
@@ -2648,6 +2800,7 @@ def process_line_event(event: dict[str, Any]) -> str | None:
     try:
         runtime_log("Downloading LINE image content")
         image_path = download_line_content(message["id"], token, resolve_path(CONFIG["image_archive_dir"]))
+        append_document_path_to_state(state, image_path)
         runtime_log(f"Downloaded LINE image to {image_path}")
         runtime_log("OCR started")
         text = ocr_image(image_path)
@@ -2703,10 +2856,139 @@ def process_line_event_menu(event: dict[str, Any], public_base_url: str) -> str 
 
     if message.get("type") == "text":
         text = str(message.get("text") or "").strip()
+        branch_match = re.match(r"^REV_BRANCH:(.+)$", text)
+        if branch_match:
+            branch = branch_match.group(1).strip()
+            state["mode"] = "awaiting_revenue_payment_channel"
+            state["transaction_type"] = "Revenue"
+            state["category"] = state.get("category") or "ยอดขายหน้าสาขา"
+            state["revenue_branch"] = branch
+            state.setdefault("revenue_payments", {})
+            set_user_state(line_user_id, state)
+            return revenue_payment_menu_message()
+        payment_match = re.match(r"^REV_PAYMENT:(.+)$", text)
+        if payment_match:
+            channel = payment_match.group(1).strip()
+            state["mode"] = "awaiting_revenue_payment_amount"
+            state["pending_payment_channel"] = channel
+            set_user_state(line_user_id, state)
+            if channel == "อื่นๆ":
+                return "กรุณาพิมพ์ชื่อช่องทางรายรับอื่นๆ พร้อมยอด เช่น Shopee: 1250 หรือ เงินสดย่อย 500 ค่ะ"
+            return f"กรุณาพิมพ์ยอดของ {channel} ค่ะ เช่น 1250.00"
+        doc_continue_match = re.match(r"^DOC_CONTINUE:(.+)$", text)
+        if doc_continue_match:
+            choice = doc_continue_match.group(1).strip()
+            if choice == "ส่งเอกสารต่อ":
+                state["mode"] = "awaiting_image"
+                set_user_state(line_user_id, state)
+                return "ส่งเอกสารเพิ่มเติมในรายการเดิมได้เลยค่ะ"
+            if state.get("pending_data"):
+                state["mode"] = "awaiting_confirmation"
+                set_user_state(line_user_id, state)
+                return confirmation_prompt(deserialize_data(state["pending_data"]))
+            return menu_message()
+        if state.get("mode") == "awaiting_more_documents":
+            if text in {"1", "ส่งเอกสารต่อ"}:
+                state["mode"] = "awaiting_image"
+                set_user_state(line_user_id, state)
+                return "ส่งเอกสารเพิ่มเติมในรายการเดิมได้เลยค่ะ"
+            if text in {"2", "ตรวจสอบและยืนยัน"} and state.get("pending_data"):
+                state["mode"] = "awaiting_confirmation"
+                set_user_state(line_user_id, state)
+                return confirmation_prompt(deserialize_data(state["pending_data"]))
+            return continue_document_menu_message()
+        if state.get("mode") == "awaiting_revenue_branch":
+            valid_branches = [item[0] for item in REVENUE_BRANCHES]
+            if text not in valid_branches:
+                return revenue_branch_menu_message()
+            state["mode"] = "awaiting_revenue_payment_channel"
+            state["transaction_type"] = "Revenue"
+            state["category"] = state.get("category") or "ยอดขายหน้าสาขา"
+            state["revenue_branch"] = text
+            state.setdefault("revenue_payments", {})
+            set_user_state(line_user_id, state)
+            return revenue_payment_menu_message()
+        if state.get("mode") == "awaiting_revenue_payment_channel":
+            valid_channels = [item[0] for item in REVENUE_PAYMENT_CHANNELS]
+            if text not in valid_channels:
+                return revenue_payment_menu_message()
+            state["mode"] = "awaiting_revenue_payment_amount"
+            state["pending_payment_channel"] = text
+            set_user_state(line_user_id, state)
+            if text == "อื่นๆ":
+                return "กรุณาพิมพ์ชื่อช่องทางรายรับอื่นๆ พร้อมยอด เช่น Shopee: 1250 หรือ เงินสดย่อย 500 ค่ะ"
+            return f"กรุณาพิมพ์ยอดของ {text} ค่ะ เช่น 1250.00"
+        if state.get("mode") == "awaiting_revenue_payment_amount":
+            channel = str(state.get("pending_payment_channel") or "อื่นๆ")
+            amount_text = text
+            if channel == "อื่นๆ":
+                other_match = re.match(r"^(.+?)[\s:=]+([0-9,]+(?:\.\d+)?)$", text)
+                if other_match:
+                    channel = other_match.group(1).strip()
+                    amount_text = other_match.group(2).strip()
+            amount = normalize_amount(amount_text)
+            if amount is None:
+                return "กรุณาพิมพ์ยอดเป็นตัวเลขค่ะ เช่น 1250.00"
+            payments = dict(state.get("revenue_payments") or {})
+            payments[channel] = round(amount, 2)
+            state["revenue_payments"] = payments
+            state.pop("pending_payment_channel", None)
+            state["mode"] = "awaiting_revenue_payment_next"
+            set_user_state(line_user_id, state)
+            return [
+                text_message("บันทึกยอดแล้วค่ะ\n" + format_revenue_payment_summary(payments)),
+                simple_choice_menu(
+                    "ต้องการเพิ่มช่องทางรายรับอีกไหม",
+                    "REV_PAY_NEXT",
+                    [
+                        ("เพิ่มช่องทาง", "#DCFCE7", "#22C55E", "1"),
+                        ("ส่งเอกสาร", "#EDE9FE", "#8B5CF6", "2"),
+                    ],
+                    "#10B981",
+                ),
+            ]
+        pay_next_match = re.match(r"^REV_PAY_NEXT:(.+)$", text)
+        if pay_next_match:
+            choice = pay_next_match.group(1).strip()
+            if choice == "เพิ่มช่องทาง":
+                state["mode"] = "awaiting_revenue_payment_channel"
+                set_user_state(line_user_id, state)
+                return revenue_payment_menu_message()
+            state["mode"] = "awaiting_image"
+            set_user_state(line_user_id, state)
+            return ask_for_receipt_after_category(f"{state.get('category', 'ยอดขายหน้าสาขา')} - {state.get('revenue_branch', '-')}")
+        if state.get("mode") == "awaiting_revenue_payment_next":
+            if text in {"1", "เพิ่มช่องทาง"}:
+                state["mode"] = "awaiting_revenue_payment_channel"
+                set_user_state(line_user_id, state)
+                return revenue_payment_menu_message()
+            if text in {"2", "ส่งเอกสาร"}:
+                state["mode"] = "awaiting_image"
+                set_user_state(line_user_id, state)
+                return ask_for_receipt_after_category(f"{state.get('category', 'ยอดขายหน้าสาขา')} - {state.get('revenue_branch', '-')}")
+            return simple_choice_menu(
+                "ต้องการเพิ่มช่องทางรายรับอีกไหม",
+                "REV_PAY_NEXT",
+                [
+                    ("เพิ่มช่องทาง", "#DCFCE7", "#22C55E", "1"),
+                    ("ส่งเอกสาร", "#EDE9FE", "#8B5CF6", "2"),
+                ],
+                "#10B981",
+            )
         category_match = re.match(r"^ACCT_CATEGORY:(Revenue|Expense):(.+)$", text, flags=re.IGNORECASE)
         if category_match:
             transaction_type = "Revenue" if category_match.group(1).lower() == "revenue" else "Expense"
             category = category_match.group(2).strip()
+            if transaction_type == "Revenue" and category == "ยอดขายหน้าสาขา":
+                set_user_state(
+                    line_user_id,
+                    {
+                        "mode": "awaiting_revenue_branch",
+                        "transaction_type": "Revenue",
+                        "category": category,
+                    },
+                )
+                return revenue_branch_menu_message()
             if category == "อื่นๆ":
                 set_user_state(
                     line_user_id,
@@ -2734,6 +3016,16 @@ def process_line_event_menu(event: dict[str, Any], public_base_url: str) -> str 
                 state["mode"] = "awaiting_account_other_category"
                 set_user_state(line_user_id, state)
                 return "กรุณาพิมพ์คำอธิบายหมวดหมู่อื่นๆ ที่ต้องการบันทึกค่ะ"
+            if transaction_type == "Revenue" and text == "ยอดขายหน้าสาขา":
+                set_user_state(
+                    line_user_id,
+                    {
+                        "mode": "awaiting_revenue_branch",
+                        "transaction_type": "Revenue",
+                        "category": text,
+                    },
+                )
+                return revenue_branch_menu_message()
             set_user_state(
                 line_user_id,
                 {
@@ -3187,6 +3479,7 @@ def process_line_event_menu(event: dict[str, Any], public_base_url: str) -> str 
                 runtime_log(f"Google Sheet save failed: {exc}")
                 clear_user_state(line_user_id)
                 return abort_flow_message(f"Google Sheet: เธขเธฑเธเนเธกเนเธชเธณเน€เธฃเนเธ ({exc})")
+            notify_accounting_import_approver(pending, line_user_id)
             clear_user_state(line_user_id)
             summary_image = render_row_summary_image(sheet_name, row, pending, "เธเธดเธฅเธเธณเน€เธเนเธฒ")
             messages = [
@@ -3255,7 +3548,7 @@ def process_line_event_menu(event: dict[str, Any], public_base_url: str) -> str 
         clear_user_state(line_user_id)
         return f"เธเธฑเธเธ—เธถเธเนเธเธฃเธฑเธเธฃเธญเธเนเธเธ—เธขเนเน€เธฃเธตเธขเธเธฃเนเธญเธขเธเนเธฐ\nRequest ID: {request_id}\n{file_url}"
 
-    if state.get("mode") != "awaiting_image":
+    if state.get("mode") not in {"awaiting_image", "awaiting_more_documents"}:
         return [
             text_message("เธเธฃเธธเธ“เธฒเน€เธฅเธทเธญเธเน€เธกเธเธนเธเนเธญเธเธชเนเธเธฃเธนเธเธเนเธฐ"),
             menu_message(),
@@ -3268,6 +3561,7 @@ def process_line_event_menu(event: dict[str, Any], public_base_url: str) -> str 
     try:
         runtime_log("Downloading LINE image content")
         image_path = download_line_content(message["id"], token, resolve_path(CONFIG["image_archive_dir"]))
+        append_document_path_to_state(state, image_path)
         runtime_log(f"Downloaded LINE image to {image_path}")
         runtime_log("OCR started")
         text = ocr_image(image_path)
@@ -3277,33 +3571,51 @@ def process_line_event_menu(event: dict[str, Any], public_base_url: str) -> str 
         draft = blank_manual_entry(state.get("transaction_type", "Expense"))
         if state.get("category"):
             draft["category"] = state.get("category")
+        draft = apply_revenue_payments_to_data(draft, state)
+        if state.get("document_paths"):
+            draft["document_paths"] = state.get("document_paths") or []
+            draft["description"] = (draft.get("description") or "Manual entry from LINE") + f" | เอกสาร {len(state.get('document_paths') or [])} ชิ้น"
         draft["submitter_name"] = get_line_display_name(line_user_id)
         set_user_state(
             line_user_id,
             {
                 "mode": "awaiting_correction",
                 "transaction_type": draft["transaction_type"],
-                "image_path": str(image_path) if "image_path" in locals() else "",
+                "image_path": str(state.get("image_path") or image_path) if "image_path" in locals() else "",
+                "document_paths": state.get("document_paths") or [],
                 "pending_data": serialize_data(draft),
             },
         )
         return manual_entry_form(draft)
-        return (
-            "OCR เธญเนเธฒเธเน€เธญเธเธชเธฒเธฃเนเธกเนเธชเธณเน€เธฃเนเธเธซเธฃเธทเธญเนเธเนเน€เธงเธฅเธฒเธเธฒเธเน€เธเธดเธเนเธเธเนเธฐ\n"
-            "เธเธฃเธธเธ“เธฒเธ–เนเธฒเธขเธฃเธนเธเนเธซเธกเนเนเธซเนเน€เธซเนเธเน€เธเธเธฒเธฐเน€เธญเธเธชเธฒเธฃเน€เธ•เนเธกเธซเธเนเธฒ เธ•เธฑเธงเธซเธเธฑเธเธชเธทเธญเธเธฑเธ” เนเธฅเธฐเนเธกเนเน€เธญเธตเธขเธเธกเธฒเธ\n"
-            "เธเธฒเธเธเธฑเนเธเธชเนเธเธฃเธนเธเน€เธเนเธฒเธกเธฒเธญเธตเธเธเธฃเธฑเนเธเธเนเธฐ"
-        )
     parsed = parse_receipt_text(text, float(CONFIG.get("vat_rate", 0.07)))
     parsed = apply_transaction_type_defaults(parsed, state.get("transaction_type", "Expense"))
     if state.get("category"):
         parsed["category"] = state.get("category")
+    parsed = apply_revenue_payments_to_data(parsed, state)
+    if state.get("pending_data"):
+        previous = deserialize_data(state.get("pending_data", {}))
+        for key in ("transaction_type", "category", "before_vat", "vat", "total", "claimable", "revenue_branch", "revenue_payments"):
+            if previous.get(key) not in (None, ""):
+                parsed[key] = previous[key]
+        parsed["raw_text"] = "\n\n--- เอกสารเพิ่มเติม ---\n\n".join(
+            part for part in [str(previous.get("raw_text") or ""), str(parsed.get("raw_text") or "")] if part
+        )
+        parsed["description"] = previous.get("description") or parsed.get("description")
+    document_count = len(state.get("document_paths") or [])
+    if document_count:
+        parsed["document_paths"] = state.get("document_paths") or []
+        parsed["description"] = (parsed.get("description") or "") + f" | เอกสาร {document_count} ชิ้น"
     parsed["submitter_name"] = parsed.get("submitter_name") or get_line_display_name(line_user_id)
     set_user_state(
         line_user_id,
         {
-            "mode": "awaiting_confirmation",
+            "mode": "awaiting_more_documents",
             "transaction_type": parsed["transaction_type"],
-            "image_path": str(image_path),
+            "image_path": str(state.get("image_path") or image_path),
+            "document_paths": state.get("document_paths") or [str(image_path)],
+            "category": parsed.get("category") or state.get("category"),
+            "revenue_branch": state.get("revenue_branch"),
+            "revenue_payments": state.get("revenue_payments") or {},
             "pending_data": serialize_data(parsed),
         },
     )
@@ -3311,7 +3623,14 @@ def process_line_event_menu(event: dict[str, Any], public_base_url: str) -> str 
         f"Parsed LINE receipt pending confirmation type={parsed['transaction_type']} "
         f"date={parsed['date']} total={parsed['total']} vendor={parsed['vendor']!r}"
     )
-    return confirmation_prompt(parsed)
+    return [
+        text_message(
+            "รับเอกสารแล้วค่ะ\n"
+            f"เอกสารในรายการนี้: {len(state.get('document_paths') or [str(image_path)])} ชิ้น\n\n"
+            "หากมีเอกสารของรายการเดียวกันเพิ่มเติม เช่น รายงานยอดขาย/สลิปโอนเงิน สามารถส่งต่อได้ค่ะ"
+        ),
+        continue_document_menu_message(),
+    ]
 
 
 class LineWebhookHandler(BaseHTTPRequestHandler):
