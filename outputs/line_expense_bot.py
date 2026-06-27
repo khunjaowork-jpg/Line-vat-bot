@@ -852,28 +852,19 @@ def coming_soon_message(section: str) -> dict[str, Any]:
 
 
 def stock_menu_message() -> dict[str, Any]:
-    return buttons_template_message(
-        "กรุณาเลือกเมนูสต็อค",
-        [
-            ("1. นำเข้าสต็อค", "นำเข้าสต็อค"),
-            ("2. นำออกสต็อค", "นำออกสต็อค"),
-            ("3. เช็คสต็อค", "เช็คสต็อค"),
-            ("4. ค้นหาสินค้า", "ค้นหาสินค้า"),
-        ],
-    )
+    return stock_branch_menu_message()
 
 
 def stock_branch_menu_message() -> dict[str, Any]:
     return buttons_template_message(
-        "กรุณาเลือกสาขาที่ต้องการค้นหาสินค้า",
+        "กรุณาเลือกสาขาที่ต้องการตรวจสอบสต็อค\nหลังเลือกสาขา สามารถพิมพ์ชื่อสินค้า/บาร์โค้ด หรือสแกนบาร์โค้ดได้สูงสุด 10 รายการต่อครั้ง",
         [
-            ("1. สี่แยก", "ค้นหาสินค้า:สี่แยก"),
-            ("2. พัสดุสี่แยก", "ค้นหาสินค้า:พัสดุสี่แยก"),
-            ("3. ทะเล", "ค้นหาสินค้า:ทะเล"),
-            ("4. เขาใหญ่", "ค้นหาสินค้า:เขาใหญ่"),
+            ("1. สี่แยก", "ค้นหาสต็อค:สี่แยก"),
+            ("2. พัสดุสี่แยก", "ค้นหาสต็อค:พัสดุสี่แยก"),
+            ("3. ทะเล", "ค้นหาสต็อค:ทะเล"),
+            ("4. เขาใหญ่", "ค้นหาสต็อค:เขาใหญ่"),
         ],
     )
-
 
 def schedule_month_menu_message() -> dict[str, Any]:
     return buttons_template_message(
@@ -2223,6 +2214,45 @@ def format_stock_results(branch: str, query: str, matches: list[dict[str, Any]])
     return "\n".join(lines).strip()
 
 
+def parse_stock_queries(text: str, limit: int = 10) -> tuple[list[str], int]:
+    raw_parts = re.split(r"[\n,;]+", text)
+    queries: list[str] = []
+    for part in raw_parts:
+        query = part.strip()
+        if query and query not in queries:
+            queries.append(query)
+    return queries[:limit], len(queries)
+
+
+def format_stock_check_results(branch: str, queries: list[str], results: dict[str, list[dict[str, Any]]], total_entered: int) -> str:
+    lines = [
+        f"ผลตรวจสอบสต็อค สาขา {branch}",
+        f"ตรวจสอบ {len(queries)} รายการ" + (" จาก 10 รายการแรก" if total_entered > 10 else ""),
+        "",
+    ]
+    for idx, query in enumerate(queries, 1):
+        matches = results.get(query) or []
+        lines.append(f"{idx}. คำค้น/บาร์โค้ด: {query}")
+        if not matches:
+            lines.extend(["ไม่พบสินค้า", ""])
+            continue
+        for item in matches[:3]:
+            qty = item.get("quantity")
+            lines.extend(
+                [
+                    f"ชื่อสินค้า: {item.get('name') or '-'}",
+                    f"จำนวนคงเหลือ: {qty if qty not in [None, ''] else '-'}",
+                    f"ราคา: {item.get('price') or '-'}",
+                    f"บาร์โค้ด: {item.get('barcode') or '-'}",
+                    "",
+                ]
+            )
+        if len(matches) > 3:
+            lines.extend([f"พบทั้งหมด {len(matches)} รายการ แสดง 3 รายการแรก", ""])
+    lines.append("ข้อมูลอ้างอิงจาก Product List/Qashier HQ ที่ซิงก์ไว้ใน Google Sheet")
+    return "\n".join(lines).strip()
+
+
 def delete_google_sheet_row(row: int, sheet_name: str = "") -> dict[str, Any]:
     payload: dict[str, Any] = {"row": int(row)}
     if sheet_name:
@@ -2450,30 +2480,37 @@ def process_line_event_menu(event: dict[str, Any], public_base_url: str) -> str 
         if text == "ค้นหาสินค้า":
             clear_user_state(line_user_id)
             return stock_branch_menu_message()
-        stock_branch_match = re.match(r"^ค้นหาสินค้า:(.+)$", text)
+        stock_branch_match = re.match("^(?:\u0e04\u0e49\u0e19\u0e2b\u0e32\u0e2a\u0e15\u0e47\u0e2d\u0e04|\u0e04\u0e49\u0e19\u0e2b\u0e32\u0e2a\u0e34\u0e19\u0e04\u0e49\u0e32):(.+)$", text)
         if stock_branch_match:
             branch = stock_branch_match.group(1).strip()
             set_user_state(line_user_id, {"mode": "awaiting_stock_product_query", "stock_branch": branch})
             return (
                 f"เลือกสาขา {branch} แล้วค่ะ\n"
-                "กรุณาพิมพ์ชื่อสินค้า หรือรหัสสินค้าที่ต้องการค้นหา"
+                "กรุณาพิมพ์ชื่อสินค้า/บาร์โค้ด หรือสแกนบาร์โค้ดได้เลย\n"
+                "ส่งได้สูงสุด 10 รายการต่อครั้ง โดยขึ้นบรรทัดใหม่หรือคั่นด้วย comma\n"
+                "ตัวอย่าง: 8851234567890, ตุ๊กตา, ABC001"
             )
         if state.get("mode") == "awaiting_stock_product_query":
-            branch = state.get("stock_branch") or "-"
+            branch = str(state.get("stock_branch") or "-")
+            queries, total_entered = parse_stock_queries(text, 10)
+            if not queries:
+                return "กรุณาพิมพ์ชื่อสินค้าหรือบาร์โค้ดที่ต้องการตรวจสอบสต็อคค่ะ"
+            results: dict[str, list[dict[str, Any]]] = {}
             try:
-                matches = search_stock_product(str(branch), text)
+                for query in queries:
+                    results[query] = search_stock_product(branch, query)
             except Exception as exc:
                 runtime_log(f"Stock search failed: {exc}")
                 clear_user_state(line_user_id)
                 return abort_flow_message(f"ค้นหาสต็อคไม่สำเร็จค่ะ ({exc})")
-            clear_user_state(line_user_id)
+            set_user_state(line_user_id, {"mode": "awaiting_stock_product_query", "stock_branch": branch})
             return [
-                text_message(format_stock_results(str(branch), text, matches)),
+                text_message(format_stock_check_results(branch, queries, results, total_entered)),
                 buttons_template_message(
-                    "ต้องการทำรายการต่อหรือไม่คะ",
+                    "ต้องการตรวจสอบต่อไหมคะ",
                     [
-                        ("ค้นหาใหม่", "ค้นหาสินค้า"),
-                        ("กลับเมนูสต็อค", "สต็อค"),
+                        ("ตรวจสาขาเดิม", f"ค้นหาสต็อค:{branch}"),
+                        ("เลือกสาขาใหม่", "สต็อค"),
                     ],
                 ),
             ]
