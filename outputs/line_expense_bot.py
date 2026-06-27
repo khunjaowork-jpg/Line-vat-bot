@@ -1254,6 +1254,28 @@ def confirm_edit_buttons_message() -> dict[str, Any]:
     }
 
 
+def approval_buttons_message(request_id: str) -> dict[str, Any]:
+    return {
+        "type": "flex",
+        "altText": "อนุมัติหรือไม่อนุมัติ",
+        "contents": {
+            "type": "bubble",
+            "size": "mega",
+            "body": {
+                "type": "box",
+                "layout": "vertical",
+                "backgroundColor": "#FFFFFF",
+                "paddingAll": "18px",
+                "spacing": "16px",
+                "contents": [
+                    confirm_edit_button("1. อนุมัติ", f"HR_APPROVE:{request_id}", "#10B981", "✓"),
+                    confirm_edit_button("2. ไม่อนุมัติ", f"HR_REJECT:{request_id}", "#EF4444", "✕"),
+                ],
+            },
+        },
+    }
+
+
 def confirmation_prompt(data: dict[str, Any]) -> list[dict[str, Any]]:
     detail_text = (
         format_parsed_details(data, "บิลนำเข้า") + "\n\n"
@@ -1764,18 +1786,28 @@ def render_substitute_receipt_pdf(image_path: Path) -> Path:
     return pdf_path
 
 
-def substitute_receipt_messages(matches: list[dict[str, Any]], public_base_url: str) -> list[dict[str, Any]]:
+def substitute_receipt_messages(matches: list[dict[str, Any]], public_base_url: str, line_user_id: str = "") -> list[dict[str, Any]]:
     data = substitute_data_from_match(matches[0])
     image_path = render_substitute_receipt_image(data)
     pdf_path = render_substitute_receipt_pdf(image_path)
+    image_url = public_file_url(public_base_url, image_path)
+    pdf_url = public_file_url(public_base_url, pdf_path)
+    save_note = "บันทึกประวัติใบแทนลง Google Sheet แล้ว"
+    try:
+        result = save_substitute_receipt_to_google(data, image_url, pdf_url, line_user_id)
+        save_note = f"บันทึกประวัติใบแทนลง Google Sheet แล้ว ({result.get('sheetName')} Row {result.get('row')})"
+    except Exception as exc:
+        runtime_log(f"Save substitute receipt record failed: {exc}")
+        save_note = f"สร้างใบแทนสำเร็จ แต่บันทึกประวัติลง Google Sheet ไม่สำเร็จชั่วคราว ({exc})"
     return [
         text_message(
-            "สร้างใบรับรองแทนใบเสร็จรับเงินเรียบร้อย\n"
+            "สร้างใบแทนเรียบร้อย\n"
             f"อ้างอิง {data.get('sheet_name')} Row {data.get('row')}\n"
+            f"{save_note}\n"
             "โปรดตรวจสอบและให้ผู้มีอำนาจลงนามก่อนใช้เป็นเอกสารประกอบบัญชี\n"
-            f"PDF สำหรับพิมพ์: {public_file_url(public_base_url, pdf_path)}"
+            f"PDF สำหรับพิมพ์: {pdf_url}"
         ),
-        image_message(public_file_url(public_base_url, image_path)),
+        image_message(image_url),
     ]
 
 
@@ -2228,6 +2260,35 @@ def save_medical_certificate_to_google(request_id: str, image_path: Path, line_u
     )
 
 
+def save_substitute_receipt_to_google(data: dict[str, Any], image_url: str, pdf_url: str, line_user_id: str) -> dict[str, Any]:
+    payload = {
+        "sheetName": data.get("sheet_name") or "",
+        "transactionRow": data.get("row") or "",
+        "date": data.get("date") or "",
+        "documentType": data.get("document_type") or "",
+        "invoiceNo": data.get("invoice_no") or "",
+        "vendor": data.get("vendor") or "",
+        "submitterName": data.get("submitter_name") or "",
+        "category": data.get("category") or "",
+        "beforeVat": data.get("before_vat") or 0,
+        "vat": data.get("vat") or 0,
+        "total": data.get("total") or 0,
+        "imageUrl": image_url,
+        "pdfUrl": pdf_url,
+        "lineUserId": line_user_id,
+    }
+    return google_sheet_action("saveSubstituteReceipt", data=payload)
+
+
+def update_hr_approval_to_google(request_id: str, approved: bool, approver_line_id: str) -> dict[str, Any]:
+    return google_sheet_action(
+        "updateHrApproval",
+        requestId=request_id,
+        approved=approved,
+        note=f"Updated from LINE by {approver_line_id}",
+    )
+
+
 def format_google_sheet_matches(matches: list[dict[str, Any]], heading: str) -> str:
     lines = [heading]
     for item in matches[:10]:
@@ -2340,7 +2401,39 @@ def process_line_event_menu(event: dict[str, Any], public_base_url: str) -> str 
             return hr_menu_message()
         if text in {"เมนู", "menu", "Menu", "MENU", "บัญชี"}:
             clear_user_state(line_user_id)
+
             return menu_message()
+        approval_match = re.match(r"^HR_(APPROVE|REJECT):(.+)$", text, flags=re.IGNORECASE)
+        if approval_match:
+            approved = approval_match.group(1).upper() == "APPROVE"
+            request_id = approval_match.group(2).strip()
+            try:
+                result = update_hr_approval_to_google(request_id, approved, line_user_id)
+            except Exception as exc:
+                runtime_log(f"Update HR approval failed: {exc}")
+                return abort_flow_message(f"\u0e2d\u0e31\u0e1b\u0e40\u0e14\u0e15\u0e1c\u0e25\u0e2d\u0e19\u0e38\u0e21\u0e31\u0e15\u0e34\u0e44\u0e21\u0e48\u0e2a\u0e33\u0e40\u0e23\u0e47\u0e08\u0e04\u0e48\u0e30 ({exc})")
+            status = result.get("approvalStatus") or ("\u0e2d\u0e19\u0e38\u0e21\u0e31\u0e15\u0e34" if approved else "\u0e44\u0e21\u0e48\u0e2d\u0e19\u0e38\u0e21\u0e31\u0e15\u0e34")
+            requester_id = str(result.get("lineUserId") or "")
+            request_type = result.get("requestType") or "\u0e04\u0e33\u0e02\u0e2d HR"
+            employee_name = result.get("employeeName") or "-"
+            if requester_id:
+                push_line_messages(
+                    requester_id,
+                    [
+                        text_message(
+                            f"\u0e1c\u0e25\u0e01\u0e32\u0e23\u0e2d\u0e19\u0e38\u0e21\u0e31\u0e15\u0e34 {request_type}\n"
+                            f"Request ID: {request_id}\n"
+                            f"\u0e0a\u0e37\u0e48\u0e2d\u0e1e\u0e19\u0e31\u0e01\u0e07\u0e32\u0e19: {employee_name}\n"
+                            f"\u0e2a\u0e16\u0e32\u0e19\u0e30: {status}"
+                        )
+                    ],
+                )
+            return (
+                f"\u0e1a\u0e31\u0e19\u0e17\u0e36\u0e01\u0e1c\u0e25\u0e2d\u0e19\u0e38\u0e21\u0e31\u0e15\u0e34\u0e40\u0e23\u0e35\u0e22\u0e1a\u0e23\u0e49\u0e2d\u0e22\u0e04\u0e48\u0e30\n"
+                f"Request ID: {request_id}\n"
+                f"\u0e0a\u0e37\u0e48\u0e2d\u0e1e\u0e19\u0e31\u0e01\u0e07\u0e32\u0e19: {employee_name}\n"
+                f"\u0e2a\u0e16\u0e32\u0e19\u0e30: {status}"
+            )
         if text in {"สต็อค", "สต๊อค", "stock", "Stock", "STOCK"}:
             clear_user_state(line_user_id)
             return stock_menu_message()
@@ -2441,7 +2534,7 @@ def process_line_event_menu(event: dict[str, Any], public_base_url: str) -> str 
                     clear_user_state(line_user_id)
                     return "ไม่พบข้อมูลสำหรับสร้างใบแทนค่ะ กรุณาเริ่มรายการใหม่อีกครั้ง"
                 clear_user_state(line_user_id)
-                return substitute_receipt_messages([match], public_base_url)
+                return substitute_receipt_messages([match], public_base_url, line_user_id)
             if text == "2":
                 clear_user_state(line_user_id)
                 return [
@@ -2466,7 +2559,7 @@ def process_line_event_menu(event: dict[str, Any], public_base_url: str) -> str 
             if not matches:
                 return "ไม่พบ Row นี้จากรายการที่ค้นหา กรุณาพิมพ์ Row ใหม่ค่ะ"
             clear_user_state(line_user_id)
-            return substitute_receipt_messages(matches, public_base_url)
+            return substitute_receipt_messages(matches, public_base_url, line_user_id)
         substitute_match = re.match(r"^ใบแทน\s+(.+)$", text, flags=re.IGNORECASE)
         if substitute_match:
             amount = normalize_amount(substitute_match.group(1))
@@ -2485,7 +2578,7 @@ def process_line_event_menu(event: dict[str, Any], public_base_url: str) -> str 
                     "ตรวจสอบว่ายอดตรงกับ Google Sheet หรือพิมพ์ยอดรวมสุทธิของรายการนั้นอีกครั้ง"
                 )
             if len(matches) == 1:
-                return substitute_receipt_messages(matches, public_base_url)
+                return substitute_receipt_messages(matches, public_base_url, line_user_id)
             set_user_state(line_user_id, {"mode": "awaiting_substitute_select", "substitute_matches": matches[:10]})
             return format_google_sheet_matches(matches, "พบหลายรายการที่สามารถสร้างใบแทนได้") + "\n\nกรุณาพิมพ์เลข Row ที่ต้องการสร้างใบแทน"
         if state.get("mode") == "awaiting_confirmation" and text in {"1", "ตรวจสอบและยืนยัน"}:
@@ -2635,7 +2728,8 @@ def process_line_event_menu(event: dict[str, Any], public_base_url: str) -> str 
                             "มีคำขอ HR รออนุมัติ\n\n"
                             + format_hr_request(request_data)
                             + f"\n\nRequest ID: {request_id}"
-                        )
+                        ),
+                        approval_buttons_message(request_id),
                     ],
                 )
                 if request_data.get("request_type") == "ลาป่วย":
@@ -2734,7 +2828,7 @@ def process_line_event_menu(event: dict[str, Any], public_base_url: str) -> str 
             ]
             substitute_match_data = substitute_match_from_pending(pending, result)
             if can_create_substitute_receipt(substitute_match_data):
-                messages.extend(substitute_receipt_messages([substitute_match_data], public_base_url))
+                messages.extend(substitute_receipt_messages([substitute_match_data], public_base_url, line_user_id))
             runtime_log(
                 f"Confirmed LINE receipt -> Google Sheet "
                 f"type={pending.get('transaction_type')} date={pending['date']} total={pending['total']}"
@@ -2787,7 +2881,8 @@ def process_line_event_menu(event: dict[str, Any], public_base_url: str) -> str 
                     "ได้รับใบรับรองแพทย์สำหรับคำขอลาป่วย\n\n"
                     + format_hr_request(request_data)
                     + f"\n\nRequest ID: {request_id}\nไฟล์: {file_url}"
-                )
+                ),
+                approval_buttons_message(request_id),
             ],
         )
         clear_user_state(line_user_id)

@@ -4,6 +4,7 @@ var EX = "Expenses";
 var RV = "Revenue";
 var LOG = "Import_Log";
 var ACC_DOCS = "Accounting_Documents";
+var SUB_RECEIPTS = "Substitute_Receipts";
 var STOCK_SPREADSHEET_ID = "1Wu3jj8iHu70DKecFuWTu6_yf8T418GBv74Mz_zOtgWQ";
 var HR_REQ = "HR_Requests";
 var HR_MED = "HR_Medical_Certificates";
@@ -13,6 +14,7 @@ var HR_MEDICAL_FOLDER = "LINE HR Medical Certificates";
 var HR_SCHEDULE_PDF_FOLDER = "LINE HR Schedule PDFs";
 var HEADERS = ["Date","Type","Invoice No","Vendor","Description","Category","Before VAT","VAT Rate","VAT","Total","Claimable","Month","Image URL","Confidence","Revenue Before VAT","Expense Before VAT","Raw Text","Document Type","LINE User ID","Submitter Name","Saved At"];
 var ACC_DOC_HEADERS = ["Saved At","Source","Type","Document Type","Date","Invoice No","Vendor","Submitter Name","Category","Before VAT","VAT","Total","Image URL","Confidence","Raw Text","LINE User ID","Transaction Row"];
+var SUB_RECEIPT_HEADERS = ["Receipt ID","Created At","Source Sheet","Transaction Row","Date","Document Type","Invoice No","Vendor","Submitter Name","Category","Before VAT","VAT","Total","Image URL","PDF URL","LINE User ID"];
 var HR_HEADERS = ["Request ID","Submitted At","Request Type","Employee Name","Start Date","End Date","Work Date","Old Date","New Date","Old Time","New Time","Reason","Note","Status","LINE User ID","Approver Note","Updated At"];
 var HR_MED_HEADERS = ["Request ID","Uploaded At","Employee Name","Leave Date","File Name","File URL","LINE User ID"];
 var HR_SCHEDULE_HEADERS = ["Date","Branch","Employee Name","Start Time","End Time","Role","Note"];
@@ -39,6 +41,7 @@ function doPost(e) {
     ensure(ss, RV, HEADERS);
     ensure(ss, LOG, ["Time","Status","Invoice No","Type","Vendor","Total","Note"]);
     ensure(ss, ACC_DOCS, ACC_DOC_HEADERS);
+    ensure(ss, SUB_RECEIPTS, SUB_RECEIPT_HEADERS);
     ensure(ss, HR_REQ, HR_HEADERS);
     ensure(ss, HR_MED, HR_MED_HEADERS);
     ensure(ss, HR_SCHEDULE, HR_SCHEDULE_HEADERS);
@@ -59,6 +62,12 @@ function doPost(e) {
     }
     if (p.action === "saveMedicalCertificate") {
       return out(saveMedicalCertificate(ss, p));
+    }
+    if (p.action === "saveSubstituteReceipt") {
+      return out(saveSubstituteReceipt(ss, p.data || {}));
+    }
+    if (p.action === "updateHrApproval") {
+      return out(updateHrApproval(ss, p));
     }
     if (p.action === "getHrSchedule") {
       return out(getHrSchedule(ss, Number(p.monthOffset || 0)));
@@ -367,6 +376,59 @@ function saveMedicalCertificate(ss, p) {
     p.lineUserId || p.line_user_id || ""
   ]);
   return {status: "ok", requestId: requestId, fileId: file.getId(), fileUrl: file.getUrl(), sheetName: HR_MED, row: sh.getLastRow()};
+}
+
+function saveSubstituteReceipt(ss, d) {
+  var sh = ss.getSheetByName(SUB_RECEIPTS);
+  var receiptId = d.receiptId || d.receipt_id || ("SUB-" + Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "yyyyMMdd-HHmmss") + "-" + Math.floor(Math.random() * 1000));
+  sh.appendRow([
+    receiptId,
+    new Date(),
+    d.sheetName || d.sheet_name || "",
+    d.transactionRow || d.transaction_row || d.row || "",
+    d.date || "",
+    d.documentType || d.document_type || "",
+    d.invoiceNo || d.invoice_no || "",
+    d.vendor || "",
+    d.submitterName || d.submitter_name || "",
+    d.category || "",
+    num(d.beforeVat || d.before_vat),
+    num(d.vat),
+    num(d.total),
+    d.imageUrl || d.image_url || "",
+    d.pdfUrl || d.pdf_url || "",
+    d.lineUserId || d.line_user_id || ""
+  ]);
+  return {status: "ok", receiptId: receiptId, sheetName: SUB_RECEIPTS, row: sh.getLastRow()};
+}
+
+function updateHrApproval(ss, p) {
+  var requestId = String(p.requestId || p.request_id || "");
+  if (!requestId) throw new Error("missing requestId");
+  var approved = String(p.approved || "").toLowerCase() === "true" || p.approved === true || String(p.status || "") === "approved";
+  var status = approved ? "อนุมัติ" : "ไม่อนุมัติ";
+  var note = String(p.note || "");
+  var sh = ss.getSheetByName(HR_REQ);
+  var values = sh.getDataRange().getValues();
+  for (var i = 1; i < values.length; i++) {
+    if (String(values[i][0]) === requestId) {
+      var row = i + 1;
+      sh.getRange(row, 14).setValue(status);
+      sh.getRange(row, 16).setValue(note);
+      sh.getRange(row, 17).setValue(new Date());
+      return {
+        status: "ok",
+        requestId: requestId,
+        approvalStatus: status,
+        row: row,
+        sheetName: HR_REQ,
+        lineUserId: values[i][14] || "",
+        requestType: values[i][2] || "",
+        employeeName: values[i][3] || ""
+      };
+    }
+  }
+  throw new Error("requestId not found");
 }
 
 function findHrRequest(ss, requestId) {
