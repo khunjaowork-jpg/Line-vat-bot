@@ -13,9 +13,10 @@ var HR_SCHEDULE_SPREADSHEET_ID = "1B9SOYGLbpdyuvW-44UXAfjUUGHJA8Cn1qO2O5hL1rR0";
 var HR_MEDICAL_FOLDER = "LINE HR Medical Certificates";
 var HR_SCHEDULE_PDF_FOLDER = "LINE HR Schedule PDFs";
 var DOCUMENT_IMAGE_FOLDER = "LINE Accounting Document Images";
+var SUBSTITUTE_RECEIPT_FOLDER = "LINE Substitute Receipts";
 var HEADERS = ["Date","Type","Invoice No","Vendor","Description","Category","Before VAT","VAT Rate","VAT","Total","Claimable","Month","Image URL","Confidence","Revenue Before VAT","Expense Before VAT","Raw Text","Document Type","LINE User ID","Submitter Name","Saved At","Withholding Tax","Image File Name","Image File ID"];
 var ACC_DOC_HEADERS = ["Saved At","Source","Type","Document Type","Date","Invoice No","Vendor","Submitter Name","Category","Before VAT","VAT","Total","Image URL","Confidence","Raw Text","LINE User ID","Transaction Row","Withholding Tax","Image File Name","Image File ID"];
-var SUB_RECEIPT_HEADERS = ["Receipt ID","Created At","Source Sheet","Transaction Row","Date","Document Type","Invoice No","Vendor","Submitter Name","Category","Before VAT","VAT","Total","Image URL","PDF URL","LINE User ID","Withholding Tax","Image File Name","Image File ID"];
+var SUB_RECEIPT_HEADERS = ["Receipt ID","Created At","Source Sheet","Transaction Row","Date","Document Type","Invoice No","Vendor","Submitter Name","Category","Before VAT","VAT","Total","Image URL","PDF URL","LINE User ID","Withholding Tax","Image File Name","Image File ID","PDF File Name","PDF File ID"];
 var HR_HEADERS = ["Request ID","Submitted At","Request Type","Employee Name","Start Date","End Date","Work Date","Old Date","New Date","Old Time","New Time","Reason","Note","Status","LINE User ID","Approver Note","Updated At"];
 var HR_MED_HEADERS = ["Request ID","Uploaded At","Employee Name","Leave Date","File Name","File ID","LINE User ID"];
 var HR_SCHEDULE_HEADERS = ["Date","Branch","Employee Name","Start Time","End Time","Role","Note"];
@@ -27,7 +28,9 @@ function doGet() {
 function authorizeDriveAccess() {
   var folder = getOrCreateFolder(HR_MEDICAL_FOLDER);
   var scheduleFolder = getOrCreateFolder(HR_SCHEDULE_PDF_FOLDER);
-  return "Drive permission ready: " + folder.getName() + ", " + scheduleFolder.getName();
+  var accountingFolder = getMonthlyFolder_(DOCUMENT_IMAGE_FOLDER, new Date());
+  var substituteFolder = getMonthlyFolder_(SUBSTITUTE_RECEIPT_FOLDER, new Date());
+  return "Drive permission ready: " + folder.getName() + ", " + scheduleFolder.getName() + ", " + accountingFolder.getName() + ", " + substituteFolder.getName();
 }
 
 function doPost(e) {
@@ -74,6 +77,15 @@ function doPost(e) {
         subData.image_file_id = subImage.fileId;
         subData.imageUrl = subImage.fileName;
         subData.image_url = subImage.fileName;
+      }
+      var subPdf = saveSubstitutePdf_(subData);
+      if (subPdf) {
+        subData.pdfFileName = subPdf.fileName;
+        subData.pdf_file_name = subPdf.fileName;
+        subData.pdfFileId = subPdf.fileId;
+        subData.pdf_file_id = subPdf.fileId;
+        subData.pdfUrl = subPdf.fileName;
+        subData.pdf_url = subPdf.fileName;
       }
       return out(saveSubstituteReceipt(ss, subData));
     }
@@ -143,9 +155,23 @@ function saveDocumentImage_(d) {
   var fileName = rawName.replace(/[\\/:*?"<>|]/g, "_");
   if (!/\.(jpg|jpeg|png)$/i.test(fileName)) fileName += ext;
   var bytes = Utilities.base64Decode(imageData);
-  var folder = getOrCreateFolder(DOCUMENT_IMAGE_FOLDER);
+  var folder = getMonthlyFolder_(DOCUMENT_IMAGE_FOLDER, d.date || d.documentDate || new Date());
   var file = folder.createFile(Utilities.newBlob(bytes, mimeType, fileName));
-  return {fileName: fileName, fileId: file.getId()};
+  return {fileName: fileName, fileId: file.getId(), folderName: folder.getName()};
+}
+
+function saveSubstitutePdf_(d) {
+  var pdfData = String(d.pdfData || d.pdf_data || "");
+  if (!pdfData) return null;
+  var mimeType = "application/pdf";
+  var receiptId = d.receiptId || d.receipt_id || ("SUB-" + Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "yyyyMMdd-HHmmss"));
+  var rawName = String(d.pdfFileName || d.pdf_file_name || (receiptId + ".pdf"));
+  var fileName = rawName.replace(/[\\/:*?"<>|]/g, "_");
+  if (!/\.pdf$/i.test(fileName)) fileName += ".pdf";
+  var bytes = Utilities.base64Decode(pdfData);
+  var folder = getMonthlyFolder_(SUBSTITUTE_RECEIPT_FOLDER, d.date || d.documentDate || new Date());
+  var file = folder.createFile(Utilities.newBlob(bytes, mimeType, fileName));
+  return {fileName: fileName, fileId: file.getId(), folderName: folder.getName()};
 }
 
 function appendAccountingDocument(ss, d, type, txRow) {
@@ -447,7 +473,9 @@ function saveSubstituteReceipt(ss, d) {
     d.lineUserId || d.line_user_id || "",
     num(d.withholdingTax || d.withholding_tax || d.wht),
     d.imageFileName || d.image_file_name || d.imageUrl || d.image_url || "",
-    d.imageFileId || d.image_file_id || ""
+    d.imageFileId || d.image_file_id || "",
+    d.pdfFileName || d.pdf_file_name || d.pdfUrl || d.pdf_url || "",
+    d.pdfFileId || d.pdf_file_id || ""
   ]);
   return {status: "ok", receiptId: receiptId, sheetName: SUB_RECEIPTS, row: sh.getLastRow()};
 }
@@ -496,6 +524,37 @@ function getOrCreateFolder(name) {
   var folders = DriveApp.getFoldersByName(name);
   if (folders.hasNext()) return folders.next();
   return DriveApp.createFolder(name);
+}
+
+function getOrCreateChildFolder_(parent, name) {
+  var folders = parent.getFoldersByName(name);
+  if (folders.hasNext()) return folders.next();
+  return parent.createFolder(name);
+}
+
+function getMonthlyFolder_(rootName, dateValue) {
+  var root = getOrCreateFolder(rootName);
+  var d = parseFolderDate_(dateValue);
+  var monthNames = ["JAN","FEB","MAR","APR","MAY","JUN","JUL","AUG","SEP","OCT","NOV","DEC"];
+  var monthFolder = getOrCreateChildFolder_(root, monthNames[d.getMonth()]);
+  return getOrCreateChildFolder_(monthFolder, String(d.getFullYear()));
+}
+
+function parseFolderDate_(value) {
+  if (value instanceof Date && !isNaN(value.getTime())) return value;
+  var text = String(value || "").trim();
+  if (text) {
+    var d = new Date(text);
+    if (!isNaN(d.getTime())) return d;
+    var m = text.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})$/);
+    if (m) {
+      var year = Number(m[3]);
+      if (year < 100) year += 2000;
+      d = new Date(year, Number(m[2]) - 1, Number(m[1]));
+      if (!isNaN(d.getTime())) return d;
+    }
+  }
+  return new Date();
 }
 
 function deleteRow(ss, row, sheetName) {

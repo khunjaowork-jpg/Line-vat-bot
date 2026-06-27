@@ -2723,6 +2723,7 @@ def save_medical_certificate_to_google(request_id: str, image_path: Path, line_u
 
 def save_substitute_receipt_to_google(data: dict[str, Any], image_path: Path, pdf_path: Path, line_user_id: str) -> dict[str, Any]:
     image_mime_type = mimetypes.guess_type(str(image_path))[0] or "image/png"
+    pdf_mime_type = mimetypes.guess_type(str(pdf_path))[0] or "application/pdf"
     payload = {
         "sheetName": data.get("sheet_name") or "",
         "transactionRow": data.get("row") or "",
@@ -2741,6 +2742,9 @@ def save_substitute_receipt_to_google(data: dict[str, Any], image_path: Path, pd
         "imageMimeType": image_mime_type,
         "imageData": base64.b64encode(image_path.read_bytes()).decode("ascii"),
         "pdfUrl": pdf_path.name,
+        "pdfFileName": pdf_path.name,
+        "pdfMimeType": pdf_mime_type,
+        "pdfData": base64.b64encode(pdf_path.read_bytes()).decode("ascii"),
         "lineUserId": line_user_id,
     }
     return google_sheet_action("saveSubstituteReceipt", data=payload)
