@@ -718,12 +718,12 @@ def correction_form(data: dict[str, Any]) -> str:
 
 def menu_text() -> str:
     return (
-        "เธเธฃเธธเธ“เธฒเน€เธฅเธทเธญเธเน€เธกเธเธน\n"
-        "1. เธเธดเธฅเธฃเธฒเธขเธฃเธฑเธ\n"
-        "2. เธเธดเธฅเธฃเธฒเธขเธเนเธฒเธข\n"
-        "3. เน€เธฃเธตเธขเธเธ”เธนเธฃเธฒเธขเธฅเธฐเน€เธญเธตเธขเธ”เธเธฑเธเธเธต\n"
-        "4. เธขเธเน€เธฅเธดเธเธเธฒเธฃเธ—เธณเธฃเธฒเธขเธเธฒเธฃ\n\n"
-        "เธเธดเธกเธเนเน€เธฅเธเน€เธกเธเธนเธ—เธตเนเธ•เนเธญเธเธเธฒเธฃเนเธ”เนเน€เธฅเธขเธเนเธฐ"
+        "กรุณาเลือกเมนู\n"
+        "1. บิลรายรับ\n"
+        "2. บิลรายจ่าย\n"
+        "3. เรียกดูรายละเอียดบัญชี\n"
+        "4. ยกเลิกการทำรายการ\n\n"
+        "พิมพ์เลขเมนูที่ต้องการได้เลยค่ะ"
     )
 
 
@@ -782,20 +782,20 @@ def account_menu_button(number: str, title: str, text: str, background: str, acc
 
 
 EXPENSE_CATEGORIES = [
-    ("เธเนเธฒเธเนเธณ", "#DBEAFE", "#3B82F6", "๐’ง"),
-    ("เธเนเธฒเนเธ", "#FEF3C7", "#F59E0B", "โก"),
-    ("เธญเธดเธเน€เธ•เธญเธฃเนเน€เธเนเธ•", "#EDE9FE", "#8B5CF6", "โ"),
-    ("เน€เธเธดเธเธเนเธณเธกเธฑเธเธฃเธ–", "#D1FAE5", "#10B981", "โฝ"),
-    ("เธชเธดเธเธเนเธฒเน€เธ•เธดเธกเธชเธ•เนเธญเธ", "#E0F2FE", "#2563EB", "โ–ฃ"),
-    ("เธเนเธฒเธเธฃเธฃเธกเน€เธเธตเธขเธก", "#FCE7F3", "#EC4899", "%"),
-    ("เธญเธทเนเธเน", "#F1F5F9", "#64748B", "โ€ฆ"),
+    ("ค่าน้ำ", "#DBEAFE", "#3B82F6", "น้ำ"),
+    ("ค่าไฟ", "#FEF3C7", "#F59E0B", "ไฟ"),
+    ("อินเตอร์เน็ต", "#EDE9FE", "#8B5CF6", "WiFi"),
+    ("เบิกน้ำมันรถ", "#D1FAE5", "#10B981", "รถ"),
+    ("สินค้าเติมสต็อค", "#E0F2FE", "#2563EB", "สต็อค"),
+    ("ค่าธรรมเนียม", "#FCE7F3", "#EC4899", "%"),
+    ("อื่นๆ", "#F1F5F9", "#64748B", "..."),
 ]
 
 REVENUE_CATEGORIES = [
-    ("เธขเธญเธ”เธเธฒเธขเน€เธเธดเธเธชเธ”", "#DCFCE7", "#22C55E", "เธฟ"),
-    ("เธขเธญเธ”เน€เธเธดเธเนเธญเธ", "#DBEAFE", "#3B82F6", "โ—"),
-    ("เธขเธญเธ”เน€เธเธฃเธ”เธดเธ•", "#FEF3C7", "#F59E0B", "โ–ฐ"),
-    ("เธญเธทเนเธเน", "#F1F5F9", "#64748B", "โ€ฆ"),
+    ("ยอดขายเงินสด", "#DCFCE7", "#22C55E", "เงิน"),
+    ("ยอดเงินโอน", "#DBEAFE", "#3B82F6", "โอน"),
+    ("ยอดเครดิต", "#FEF3C7", "#F59E0B", "บัตร"),
+    ("อื่นๆ", "#F1F5F9", "#64748B", "..."),
 ]
 
 
@@ -856,7 +856,7 @@ def category_menu_item(transaction_type: str, label: str, bg: str, accent: str, 
 def category_menu_message(transaction_type: str) -> dict[str, Any]:
     is_revenue = transaction_type == "Revenue"
     categories = REVENUE_CATEGORIES if is_revenue else EXPENSE_CATEGORIES
-    title = "เธเธฃเธธเธ“เธฒเน€เธฅเธทเธญเธเธเธฃเธฐเน€เธ เธ—เธฃเธฒเธขเนเธ”เน" if is_revenue else "เธเธฃเธธเธ“เธฒเน€เธฅเธทเธญเธเธเธฃเธฐเน€เธ เธ—เธเนเธฒเนเธเนเธเนเธฒเธข"
+    title = "กรุณาเลือกประเภทรายได้" if is_revenue else "กรุณาเลือกประเภทค่าใช้จ่าย"
     accent = "#8B5CF6" if is_revenue else "#3B82F6"
     return {
         "type": "flex",
@@ -910,21 +910,21 @@ def category_menu_message(transaction_type: str) -> dict[str, Any]:
 
 def ask_for_receipt_after_category(category: str) -> str:
     return (
-        f"เน€เธฅเธทเธญเธเธซเธกเธงเธ”เธซเธกเธนเน: {category}\n\n"
-        "เธชเนเธเน€เธญเธเธชเธฒเธฃเน€เธเธทเนเธญเธเธฑเธเธ—เธถเธเธฃเธฒเธขเธฅเธฐเน€เธญเธตเธขเธ”เนเธเธฃเธฐเธเธเนเธ”เนเน€เธฅเธขเธเนเธฐ"
+        f"เลือกหมวดหมู่: {category}\n\n"
+        "ส่งเอกสารเพื่อบันทึกรายละเอียดในระบบได้เลยค่ะ"
     )
 
 
 def menu_message() -> dict[str, Any]:
     buttons = [
-        account_menu_button("1", "เธเธดเธฅเธฃเธฒเธขเธฃเธฑเธ", "1", "#F1F7FF", "#3B82F6"),
-        account_menu_button("2", "เธเธดเธฅเธฃเธฒเธขเธเนเธฒเธข", "2", "#EFFCF8", "#10B981"),
-        account_menu_button("3", "เน€เธฃเธตเธขเธเธ”เธนเธเธฑเธเธเธต", "3", "#FFF7E8", "#F59E0B"),
-        account_menu_button("4", "เธขเธเน€เธฅเธดเธเธฃเธฒเธขเธเธฒเธฃ", "4", "#FFF1F6", "#EC4899"),
+        account_menu_button("1", "บิลรายรับ", "1", "#F1F7FF", "#3B82F6"),
+        account_menu_button("2", "บิลรายจ่าย", "2", "#EFFCF8", "#10B981"),
+        account_menu_button("3", "เรียกดูบัญชี", "3", "#FFF7E8", "#F59E0B"),
+        account_menu_button("4", "ยกเลิกรายการ", "4", "#FFF1F6", "#EC4899"),
     ]
     return {
         "type": "flex",
-        "altText": "เธเธฃเธธเธ“เธฒเน€เธฅเธทเธญเธเน€เธกเธเธนเธเธฑเธเธเธต",
+        "altText": "กรุณาเลือกเมนูบัญชี",
         "contents": {
             "type": "bubble",
             "size": "giga",
@@ -955,9 +955,9 @@ def menu_message() -> dict[str, Any]:
                                 "contents": [
                                     {
                                         "type": "text",
-                                        "text": "โก",
+                                        "text": "เมนู",
                                         "weight": "bold",
-                                        "size": "xxl",
+                                        "size": "md",
                                         "color": "#FFFFFF",
                                         "align": "center",
                                     }
@@ -965,7 +965,7 @@ def menu_message() -> dict[str, Any]:
                             },
                             {
                                 "type": "text",
-                                "text": "เธเธฃเธธเธ“เธฒเน€เธฅเธทเธญเธเน€เธกเธเธน",
+                                "text": "กรุณาเลือกเมนู",
                                 "weight": "bold",
                                 "size": "xxl",
                                 "color": "#111C4E",
@@ -1370,7 +1370,7 @@ def confirm_edit_button(label: str, text: str, background: str, icon: str) -> di
 def confirm_edit_buttons_message() -> dict[str, Any]:
     return {
         "type": "flex",
-        "altText": "เธขเธทเธเธขเธฑเธเธซเธฃเธทเธญเนเธเนเนเธเธเนเธญเธกเธนเธฅ",
+        "altText": "ยืนยันหรือแก้ไขข้อมูล",
         "contents": {
             "type": "bubble",
             "size": "mega",
@@ -1381,8 +1381,8 @@ def confirm_edit_buttons_message() -> dict[str, Any]:
                 "paddingAll": "18px",
                 "spacing": "16px",
                 "contents": [
-                    confirm_edit_button("1. เธขเธทเธเธขเธฑเธ", "1", "#10B981", "โ“"),
-                    confirm_edit_button("2. เนเธเนเนเธ", "2", "#8B5CF6", "โ"),
+                    confirm_edit_button("1. ยืนยัน", "1", "#10B981", "OK"),
+                    confirm_edit_button("2. แก้ไข", "2", "#8B5CF6", "Edit"),
                 ],
             },
         },
@@ -1392,7 +1392,7 @@ def confirm_edit_buttons_message() -> dict[str, Any]:
 def approval_buttons_message(request_id: str) -> dict[str, Any]:
     return {
         "type": "flex",
-        "altText": "เธญเธเธธเธกเธฑเธ•เธดเธซเธฃเธทเธญเนเธกเนเธญเธเธธเธกเธฑเธ•เธด",
+        "altText": "อนุมัติหรือไม่อนุมัติ",
         "contents": {
             "type": "bubble",
             "size": "mega",
@@ -1403,8 +1403,8 @@ def approval_buttons_message(request_id: str) -> dict[str, Any]:
                 "paddingAll": "18px",
                 "spacing": "16px",
                 "contents": [
-                    confirm_edit_button("1. เธญเธเธธเธกเธฑเธ•เธด", f"HR_APPROVE:{request_id}", "#10B981", "โ“"),
-                    confirm_edit_button("2. เนเธกเนเธญเธเธธเธกเธฑเธ•เธด", f"HR_REJECT:{request_id}", "#EF4444", "โ•"),
+                    confirm_edit_button("1. อนุมัติ", f"HR_APPROVE:{request_id}", "#10B981", "OK"),
+                    confirm_edit_button("2. ไม่อนุมัติ", f"HR_REJECT:{request_id}", "#EF4444", "No"),
                 ],
             },
         },
@@ -3120,18 +3120,18 @@ def process_line_event_menu(event: dict[str, Any], public_base_url: str) -> str 
                 set_user_state(line_user_id, state)
                 return hr_request_form(dict(state.get("hr_request") or {}))
             return "เธเธฃเธธเธ“เธฒเธ•เธญเธ 1 เน€เธเธทเนเธญเธขเธทเธเธขเธฑเธเธชเนเธเธเธณเธเธญ เธซเธฃเธทเธญ 2 เน€เธเธทเนเธญเนเธเนเนเธเธเนเธญเธกเธนเธฅเธเนเธฐ"
-        if text in {"1", "เธเธดเธฅเธฃเธฒเธขเธฃเธฑเธ"}:
+        if text in {"1", "บิลรายรับ", "เธเธดเธฅเธฃเธฒเธขเธฃเธฑเธ"}:
             set_user_state(line_user_id, {"mode": "awaiting_account_category", "transaction_type": "Revenue"})
             return category_menu_message("Revenue")
-        if text in {"2", "เธเธดเธฅเธฃเธฒเธขเธเนเธฒเธข"}:
+        if text in {"2", "บิลรายจ่าย", "เธเธดเธฅเธฃเธฒเธขเธเนเธฒเธข"}:
             set_user_state(line_user_id, {"mode": "awaiting_account_category", "transaction_type": "Expense"})
             return category_menu_message("Expense")
-        if text in {"3", "เน€เธฃเธตเธขเธเธ”เธนเธฃเธฒเธขเธฅเธฐเน€เธญเธตเธขเธ”เธเธฑเธเธเธต"}:
+        if text in {"3", "เรียกดูบัญชี", "เรียกดูรายละเอียดบัญชี", "เน€เธฃเธตเธขเธเธ”เธนเธฃเธฒเธขเธฅเธฐเน€เธญเธตเธขเธ”เธเธฑเธเธเธต"}:
             set_user_state(line_user_id, {"mode": "awaiting_lookup_bill_no"})
-            return "เธเธฃเธธเธ“เธฒเธเธดเธกเธเนเน€เธฅเธเธ—เธตเนเธเธดเธฅ เธเธทเนเธญเธฃเนเธฒเธ/เธเธนเนเธเนเธฒ เธซเธฃเธทเธญเธขเธญเธ”เธฃเธงเธกเธ—เธตเนเธ•เนเธญเธเธเธฒเธฃเธ•เธฃเธงเธเธชเธญเธเธเนเธฐ"
-        if text in {"4", "เธขเธเน€เธฅเธดเธเธเธฒเธฃเธ—เธณเธฃเธฒเธขเธเธฒเธฃ"}:
+            return "กรุณาพิมพ์เลขที่บิล ชื่อร้าน/คู่ค้า หรือยอดรวมที่ต้องการตรวจสอบค่ะ"
+        if text in {"4", "ยกเลิกรายการ", "ยกเลิกการทำรายการ", "เธขเธเน€เธฅเธดเธเธเธฒเธฃเธ—เธณเธฃเธฒเธขเธเธฒเธฃ"}:
             set_user_state(line_user_id, {"mode": "awaiting_cancel_total"})
-            return "เธเธฃเธธเธ“เธฒเธเธดเธกเธเนเธขเธญเธ”เธฃเธงเธกเธชเธธเธ—เธเธดเธซเธฃเธทเธญเธขเธญเธ”เธเนเธญเธ VAT เธเธญเธเธฃเธฒเธขเธเธฒเธฃเธ—เธตเนเธ•เนเธญเธเธเธฒเธฃเธขเธเน€เธฅเธดเธเธเนเธฐ เน€เธเนเธ 2251.72"
+            return "กรุณาพิมพ์ยอดรวมสุทธิหรือยอดก่อน VAT ของรายการที่ต้องการยกเลิกค่ะ เช่น 2251.72"
         if state.get("mode") == "awaiting_lookup_bill_no":
             row_match = re.match(r"^(?:row\s*)?(\d+)$", text, flags=re.IGNORECASE)
             if row_match and state.get("lookup_rows"):
