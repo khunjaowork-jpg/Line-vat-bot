@@ -12,11 +12,12 @@ var HR_SCHEDULE = "HR_Work_Schedule";
 var HR_SCHEDULE_SPREADSHEET_ID = "1B9SOYGLbpdyuvW-44UXAfjUUGHJA8Cn1qO2O5hL1rR0";
 var HR_MEDICAL_FOLDER = "LINE HR Medical Certificates";
 var HR_SCHEDULE_PDF_FOLDER = "LINE HR Schedule PDFs";
-var HEADERS = ["Date","Type","Invoice No","Vendor","Description","Category","Before VAT","VAT Rate","VAT","Total","Claimable","Month","Image URL","Confidence","Revenue Before VAT","Expense Before VAT","Raw Text","Document Type","LINE User ID","Submitter Name","Saved At","Withholding Tax"];
-var ACC_DOC_HEADERS = ["Saved At","Source","Type","Document Type","Date","Invoice No","Vendor","Submitter Name","Category","Before VAT","VAT","Total","Image URL","Confidence","Raw Text","LINE User ID","Transaction Row","Withholding Tax"];
-var SUB_RECEIPT_HEADERS = ["Receipt ID","Created At","Source Sheet","Transaction Row","Date","Document Type","Invoice No","Vendor","Submitter Name","Category","Before VAT","VAT","Total","Image URL","PDF URL","LINE User ID","Withholding Tax"];
+var DOCUMENT_IMAGE_FOLDER = "LINE Accounting Document Images";
+var HEADERS = ["Date","Type","Invoice No","Vendor","Description","Category","Before VAT","VAT Rate","VAT","Total","Claimable","Month","Image URL","Confidence","Revenue Before VAT","Expense Before VAT","Raw Text","Document Type","LINE User ID","Submitter Name","Saved At","Withholding Tax","Image File Name","Image File ID"];
+var ACC_DOC_HEADERS = ["Saved At","Source","Type","Document Type","Date","Invoice No","Vendor","Submitter Name","Category","Before VAT","VAT","Total","Image URL","Confidence","Raw Text","LINE User ID","Transaction Row","Withholding Tax","Image File Name","Image File ID"];
+var SUB_RECEIPT_HEADERS = ["Receipt ID","Created At","Source Sheet","Transaction Row","Date","Document Type","Invoice No","Vendor","Submitter Name","Category","Before VAT","VAT","Total","Image URL","PDF URL","LINE User ID","Withholding Tax","Image File Name","Image File ID"];
 var HR_HEADERS = ["Request ID","Submitted At","Request Type","Employee Name","Start Date","End Date","Work Date","Old Date","New Date","Old Time","New Time","Reason","Note","Status","LINE User ID","Approver Note","Updated At"];
-var HR_MED_HEADERS = ["Request ID","Uploaded At","Employee Name","Leave Date","File Name","File URL","LINE User ID"];
+var HR_MED_HEADERS = ["Request ID","Uploaded At","Employee Name","Leave Date","File Name","File ID","LINE User ID"];
 var HR_SCHEDULE_HEADERS = ["Date","Branch","Employee Name","Start Time","End Time","Role","Note"];
 
 function doGet() {
@@ -64,7 +65,17 @@ function doPost(e) {
       return out(saveMedicalCertificate(ss, p));
     }
     if (p.action === "saveSubstituteReceipt") {
-      return out(saveSubstituteReceipt(ss, p.data || {}));
+      var subData = p.data || {};
+      var subImage = saveDocumentImage_(subData);
+      if (subImage) {
+        subData.imageFileName = subImage.fileName;
+        subData.image_file_name = subImage.fileName;
+        subData.imageFileId = subImage.fileId;
+        subData.image_file_id = subImage.fileId;
+        subData.imageUrl = subImage.fileName;
+        subData.image_url = subImage.fileName;
+      }
+      return out(saveSubstituteReceipt(ss, subData));
     }
     if (p.action === "updateHrApproval") {
       return out(updateHrApproval(ss, p));
@@ -73,6 +84,15 @@ function doPost(e) {
       return out(getHrSchedule(ss, Number(p.monthOffset || 0)));
     }
     var d = p.data || p;
+    var savedImage = saveDocumentImage_(d);
+    if (savedImage) {
+      d.imageFileName = savedImage.fileName;
+      d.image_file_name = savedImage.fileName;
+      d.imageFileId = savedImage.fileId;
+      d.image_file_id = savedImage.fileId;
+      d.imageUrl = savedImage.fileName;
+      d.image_url = savedImage.fileName;
+    }
     var row = buildRow(d);
     var type = normType(d.type || "Expense");
     var txSheet = ss.getSheetByName(TX);
@@ -108,7 +128,24 @@ function buildRow(d) {
   var vat = num(d.vat || d.vatAmount || d.vat_amount);
   var total = num(d.total || d.totalAmount || d.total_amount);
   var month = d.month || monthKey(date);
-  return [date,type,d.invoiceNo || d.invoice_no || d.documentNo || d.billNo || "-",d.vendor || d.shopName || d.partner || "",d.description || "",d.category || "",beforeVat,vatRate,vat,total,d.claimable || "Yes",month,d.imageUrl || "",d.confidence || "",type === "Revenue" ? beforeVat : 0,type === "Expense" ? beforeVat : 0,d.rawText || d.raw_text || "",d.documentType || d.document_type || "",d.lineUserId || d.line_user_id || "",d.submitterName || d.submitter_name || "",new Date(),num(d.withholdingTax || d.withholding_tax || d.wht)];
+  var imageFileName = d.imageFileName || d.image_file_name || d.imageUrl || "";
+  var imageFileId = d.imageFileId || d.image_file_id || "";
+  return [date,type,d.invoiceNo || d.invoice_no || d.documentNo || d.billNo || "-",d.vendor || d.shopName || d.partner || "",d.description || "",d.category || "",beforeVat,vatRate,vat,total,d.claimable || "Yes",month,imageFileName,d.confidence || "",type === "Revenue" ? beforeVat : 0,type === "Expense" ? beforeVat : 0,d.rawText || d.raw_text || "",d.documentType || d.document_type || "",d.lineUserId || d.line_user_id || "",d.submitterName || d.submitter_name || "",new Date(),num(d.withholdingTax || d.withholding_tax || d.wht),imageFileName,imageFileId];
+}
+
+function saveDocumentImage_(d) {
+  var imageData = String(d.imageData || d.image_data || "");
+  if (!imageData) return null;
+  var mimeType = String(d.imageMimeType || d.image_mime_type || "image/jpeg");
+  if (["image/jpeg","image/png"].indexOf(mimeType) < 0) mimeType = "image/jpeg";
+  var ext = mimeType === "image/png" ? ".png" : ".jpg";
+  var rawName = String(d.imageFileName || d.image_file_name || ("document-" + Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "yyyyMMdd-HHmmss") + ext));
+  var fileName = rawName.replace(/[\\/:*?"<>|]/g, "_");
+  if (!/\.(jpg|jpeg|png)$/i.test(fileName)) fileName += ext;
+  var bytes = Utilities.base64Decode(imageData);
+  var folder = getOrCreateFolder(DOCUMENT_IMAGE_FOLDER);
+  var file = folder.createFile(Utilities.newBlob(bytes, mimeType, fileName));
+  return {fileName: fileName, fileId: file.getId()};
 }
 
 function appendAccountingDocument(ss, d, type, txRow) {
@@ -126,12 +163,14 @@ function appendAccountingDocument(ss, d, type, txRow) {
     num(d.beforeVat || d.before_vat || d.subtotal),
     num(d.vat || d.vatAmount || d.vat_amount),
     num(d.total || d.totalAmount || d.total_amount),
-    d.imageUrl || "",
+    d.imageFileName || d.image_file_name || d.imageUrl || "",
     d.confidence || "",
     d.rawText || d.raw_text || "",
     d.lineUserId || d.line_user_id || "",
     txRow || "",
-    num(d.withholdingTax || d.withholding_tax || d.wht)
+    num(d.withholdingTax || d.withholding_tax || d.wht),
+    d.imageFileName || d.image_file_name || d.imageUrl || "",
+    d.imageFileId || d.image_file_id || ""
   ]);
 }
 
@@ -380,10 +419,10 @@ function saveMedicalCertificate(ss, p) {
     request.employeeName || "",
     request.startDate || "",
     fileName,
-    file.getUrl(),
+    file.getId(),
     p.lineUserId || p.line_user_id || ""
   ]);
-  return {status: "ok", requestId: requestId, fileId: file.getId(), fileUrl: file.getUrl(), sheetName: HR_MED, row: sh.getLastRow()};
+  return {status: "ok", requestId: requestId, fileId: file.getId(), fileName: fileName, sheetName: HR_MED, row: sh.getLastRow()};
 }
 
 function saveSubstituteReceipt(ss, d) {
@@ -403,10 +442,12 @@ function saveSubstituteReceipt(ss, d) {
     num(d.beforeVat || d.before_vat),
     num(d.vat),
     num(d.total),
-    d.imageUrl || d.image_url || "",
-    d.pdfUrl || d.pdf_url || "",
+    d.imageFileName || d.image_file_name || d.imageUrl || d.image_url || "",
+    d.pdfFileName || d.pdf_file_name || d.pdfUrl || d.pdf_url || "",
     d.lineUserId || d.line_user_id || "",
-    num(d.withholdingTax || d.withholding_tax || d.wht)
+    num(d.withholdingTax || d.withholding_tax || d.wht),
+    d.imageFileName || d.image_file_name || d.imageUrl || d.image_url || "",
+    d.imageFileId || d.image_file_id || ""
   ]);
   return {status: "ok", receiptId: receiptId, sheetName: SUB_RECEIPTS, row: sh.getLastRow()};
 }

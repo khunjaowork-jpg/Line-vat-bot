@@ -1803,7 +1803,7 @@ def substitute_receipt_messages(matches: list[dict[str, Any]], public_base_url: 
     pdf_url = public_file_url(public_base_url, pdf_path)
     save_note = "บันทึกประวัติใบแทนลง Google Sheet แล้ว"
     try:
-        result = save_substitute_receipt_to_google(data, image_url, pdf_url, line_user_id)
+        result = save_substitute_receipt_to_google(data, image_path, pdf_path, line_user_id)
         save_note = f"บันทึกประวัติใบแทนลง Google Sheet แล้ว ({result.get('sheetName')} Row {result.get('row')})"
     except Exception as exc:
         runtime_log(f"Save substitute receipt record failed: {exc}")
@@ -2129,8 +2129,13 @@ def build_google_sheet_payload(data: dict[str, Any], image_path: Path, line_user
     vat = float(data.get("vat") or round(before_vat * vat_rate, 2))
     total = float(data.get("total") or round(before_vat + vat, 2))
     image_url = ""
+    image_file_name = ""
+    image_data = ""
+    image_mime_type = ""
     if image_path and image_path.name and public_base_url:
-        image_url = f"{public_base_url.rstrip()}/files/{image_path.name}"
+        image_file_name = image_path.name
+        image_mime_type = mimetypes.guess_type(str(image_path))[0] or "image/jpeg"
+        image_data = base64.b64encode(image_path.read_bytes()).decode("ascii")
     date_value = data.get("date") or dt.date.today()
     if isinstance(date_value, (dt.datetime, dt.date)):
         date_text = date_value.isoformat()[:10]
@@ -2158,8 +2163,14 @@ def build_google_sheet_payload(data: dict[str, Any], image_path: Path, line_user
         "total": total,
         "claimable": data.get("claimable", "Yes"),
         "month": month_text,
-        "imageUrl": image_url,
-        "image_url": image_url,
+        "imageUrl": image_file_name or image_url,
+        "image_url": image_file_name or image_url,
+        "imageFileName": image_file_name,
+        "image_file_name": image_file_name,
+        "imageMimeType": image_mime_type,
+        "image_mime_type": image_mime_type,
+        "imageData": image_data,
+        "image_data": image_data,
         "confidence": data.get("confidence", ""),
         "rawText": data.get("raw_text", ""),
         "raw_text": data.get("raw_text", ""),
@@ -2424,7 +2435,8 @@ def save_medical_certificate_to_google(request_id: str, image_path: Path, line_u
     )
 
 
-def save_substitute_receipt_to_google(data: dict[str, Any], image_url: str, pdf_url: str, line_user_id: str) -> dict[str, Any]:
+def save_substitute_receipt_to_google(data: dict[str, Any], image_path: Path, pdf_path: Path, line_user_id: str) -> dict[str, Any]:
+    image_mime_type = mimetypes.guess_type(str(image_path))[0] or "image/png"
     payload = {
         "sheetName": data.get("sheet_name") or "",
         "transactionRow": data.get("row") or "",
@@ -2438,8 +2450,11 @@ def save_substitute_receipt_to_google(data: dict[str, Any], image_url: str, pdf_
         "vat": data.get("vat") or 0,
         "withholdingTax": data.get("withholding_tax") or data.get("withholdingTax") or 0,
         "total": data.get("total") or 0,
-        "imageUrl": image_url,
-        "pdfUrl": pdf_url,
+        "imageUrl": image_path.name,
+        "imageFileName": image_path.name,
+        "imageMimeType": image_mime_type,
+        "imageData": base64.b64encode(image_path.read_bytes()).decode("ascii"),
+        "pdfUrl": pdf_path.name,
         "lineUserId": line_user_id,
     }
     return google_sheet_action("saveSubstituteReceipt", data=payload)
@@ -3133,6 +3148,10 @@ class LineWebhookHandler(BaseHTTPRequestHandler):
         if self.path.startswith("/files/"):
             filename = Path(unquote(self.path.split("/files/", 1)[1])).name
             file_path = reply_image_dir() / filename
+            if not file_path.exists() or not file_path.is_file():
+                archive_path = resolve_path(CONFIG.get("image_archive_dir", "outputs/line_uploaded_receipts")) / filename
+                if archive_path.exists() and archive_path.is_file():
+                    file_path = archive_path
             if not file_path.exists() or not file_path.is_file():
                 self._send_json(HTTPStatus.NOT_FOUND, {"error": "file not found"})
                 return
