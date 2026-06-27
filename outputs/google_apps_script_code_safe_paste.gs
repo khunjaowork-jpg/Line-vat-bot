@@ -12,9 +12,9 @@ var HR_SCHEDULE = "HR_Work_Schedule";
 var HR_SCHEDULE_SPREADSHEET_ID = "1B9SOYGLbpdyuvW-44UXAfjUUGHJA8Cn1qO2O5hL1rR0";
 var HR_MEDICAL_FOLDER = "LINE HR Medical Certificates";
 var HR_SCHEDULE_PDF_FOLDER = "LINE HR Schedule PDFs";
-var HEADERS = ["Date","Type","Invoice No","Vendor","Description","Category","Before VAT","VAT Rate","VAT","Total","Claimable","Month","Image URL","Confidence","Revenue Before VAT","Expense Before VAT","Raw Text","Document Type","LINE User ID","Submitter Name","Saved At"];
-var ACC_DOC_HEADERS = ["Saved At","Source","Type","Document Type","Date","Invoice No","Vendor","Submitter Name","Category","Before VAT","VAT","Total","Image URL","Confidence","Raw Text","LINE User ID","Transaction Row"];
-var SUB_RECEIPT_HEADERS = ["Receipt ID","Created At","Source Sheet","Transaction Row","Date","Document Type","Invoice No","Vendor","Submitter Name","Category","Before VAT","VAT","Total","Image URL","PDF URL","LINE User ID"];
+var HEADERS = ["Date","Type","Invoice No","Vendor","Description","Category","Before VAT","VAT Rate","VAT","Total","Claimable","Month","Image URL","Confidence","Revenue Before VAT","Expense Before VAT","Raw Text","Document Type","LINE User ID","Submitter Name","Saved At","Withholding Tax"];
+var ACC_DOC_HEADERS = ["Saved At","Source","Type","Document Type","Date","Invoice No","Vendor","Submitter Name","Category","Before VAT","VAT","Total","Image URL","Confidence","Raw Text","LINE User ID","Transaction Row","Withholding Tax"];
+var SUB_RECEIPT_HEADERS = ["Receipt ID","Created At","Source Sheet","Transaction Row","Date","Document Type","Invoice No","Vendor","Submitter Name","Category","Before VAT","VAT","Total","Image URL","PDF URL","LINE User ID","Withholding Tax"];
 var HR_HEADERS = ["Request ID","Submitted At","Request Type","Employee Name","Start Date","End Date","Work Date","Old Date","New Date","Old Time","New Time","Reason","Note","Status","LINE User ID","Approver Note","Updated At"];
 var HR_MED_HEADERS = ["Request ID","Uploaded At","Employee Name","Leave Date","File Name","File URL","LINE User ID"];
 var HR_SCHEDULE_HEADERS = ["Date","Branch","Employee Name","Start Time","End Time","Role","Note"];
@@ -91,6 +91,13 @@ function ensure(ss, name, headers) {
   var sh = ss.getSheetByName(name);
   if (!sh) sh = ss.insertSheet(name);
   if (sh.getLastRow() === 0) sh.appendRow(headers);
+  var current = sh.getRange(1, 1, 1, Math.max(sh.getLastColumn(), headers.length)).getValues()[0];
+  headers.forEach(function(header) {
+    if (current.indexOf(header) === -1) {
+      sh.getRange(1, sh.getLastColumn() + 1).setValue(header);
+      current.push(header);
+    }
+  });
 }
 
 function buildRow(d) {
@@ -101,7 +108,7 @@ function buildRow(d) {
   var vat = num(d.vat || d.vatAmount || d.vat_amount);
   var total = num(d.total || d.totalAmount || d.total_amount);
   var month = d.month || monthKey(date);
-  return [date,type,d.invoiceNo || d.invoice_no || d.documentNo || d.billNo || "-",d.vendor || d.shopName || d.partner || "",d.description || "",d.category || "",beforeVat,vatRate,vat,total,d.claimable || "Yes",month,d.imageUrl || "",d.confidence || "",type === "Revenue" ? beforeVat : 0,type === "Expense" ? beforeVat : 0,d.rawText || d.raw_text || "",d.documentType || d.document_type || "",d.lineUserId || d.line_user_id || "",d.submitterName || d.submitter_name || "",new Date()];
+  return [date,type,d.invoiceNo || d.invoice_no || d.documentNo || d.billNo || "-",d.vendor || d.shopName || d.partner || "",d.description || "",d.category || "",beforeVat,vatRate,vat,total,d.claimable || "Yes",month,d.imageUrl || "",d.confidence || "",type === "Revenue" ? beforeVat : 0,type === "Expense" ? beforeVat : 0,d.rawText || d.raw_text || "",d.documentType || d.document_type || "",d.lineUserId || d.line_user_id || "",d.submitterName || d.submitter_name || "",new Date(),num(d.withholdingTax || d.withholding_tax || d.wht)];
 }
 
 function appendAccountingDocument(ss, d, type, txRow) {
@@ -123,7 +130,8 @@ function appendAccountingDocument(ss, d, type, txRow) {
     d.confidence || "",
     d.rawText || d.raw_text || "",
     d.lineUserId || d.line_user_id || "",
-    txRow || ""
+    txRow || "",
+    num(d.withholdingTax || d.withholding_tax || d.wht)
   ]);
 }
 
@@ -397,7 +405,8 @@ function saveSubstituteReceipt(ss, d) {
     num(d.total),
     d.imageUrl || d.image_url || "",
     d.pdfUrl || d.pdf_url || "",
-    d.lineUserId || d.line_user_id || ""
+    d.lineUserId || d.line_user_id || "",
+    num(d.withholdingTax || d.withholding_tax || d.wht)
   ]);
   return {status: "ok", receiptId: receiptId, sheetName: SUB_RECEIPTS, row: sh.getLastRow()};
 }
