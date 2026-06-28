@@ -1454,8 +1454,6 @@ def blank_manual_entry(transaction_type: str) -> dict[str, Any]:
 
 def manual_entry_form(data: dict[str, Any]) -> str:
     return (
-        "OCR อ่านเอกสารไม่สำเร็จหรือใช้เวลานานเกินไปค่ะ\n"
-        "กรุณากรอกรายละเอียดตามแบบฟอร์มนี้ แล้วส่งกลับมาได้เลยค่ะ\n\n"
         f"ประเภทเอกสาร: {data.get('document_type') or ''}\n"
         f"วันที่: {data.get('date') or ''}\n"
         f"เลขที่บิล: {normalize_invoice_no(data.get('invoice_no'))}\n"
@@ -1467,6 +1465,16 @@ def manual_entry_form(data: dict[str, Any]) -> str:
         f"ภาษีหัก ณ ที่จ่าย: {float(data.get('withholding_tax') or 0):.2f}\n"
         f"ยอดรวม: {float(data.get('total') or 0):.2f}"
     )
+
+
+def manual_entry_messages(data: dict[str, Any]) -> list[dict[str, Any]]:
+    return [
+        text_message(
+            "OCR อ่านเอกสารไม่สำเร็จหรือใช้เวลานานเกินไปค่ะ\n"
+            "กรุณากรอกรายละเอียดตามแบบฟอร์มนี้ แล้วส่งกลับมาได้เลยค่ะ"
+        ),
+        text_message(manual_entry_form(data)),
+    ]
 
 
 def confirm_edit_button(label: str, text: str, background: str, icon: str) -> dict[str, Any]:
@@ -2839,7 +2847,7 @@ def process_line_event(event: dict[str, Any]) -> str | None:
                 "pending_data": serialize_data(draft),
             },
         )
-        return manual_entry_form(draft)
+        return manual_entry_messages(draft)
     parsed = parse_receipt_text(text, float(CONFIG.get("vat_rate", 0.07)))
     sheet_name, row = append_expense_to_excel(image_path, parsed, "Imported", "Imported from LINE OCR", line_user_id)
     runtime_log(
@@ -3377,7 +3385,7 @@ def process_line_event_menu(event: dict[str, Any], public_base_url: str) -> str 
                 return "เธขเธฑเธเนเธกเนเธกเธตเธเธดเธฅเธ—เธตเนเธฃเธญเนเธเนเนเธเธเนเธฐ"
             state["mode"] = "awaiting_correction"
             set_user_state(line_user_id, state)
-            return manual_entry_form(deserialize_data(state.get("pending_data", {})))
+            return manual_entry_messages(deserialize_data(state.get("pending_data", {})))
         if state.get("mode") == "awaiting_hr_form":
             draft = dict(state.get("hr_request") or {})
             updated = parse_hr_request_text(text, draft)
@@ -3607,7 +3615,7 @@ def process_line_event_menu(event: dict[str, Any], public_base_url: str) -> str 
                 "pending_data": serialize_data(draft),
             },
         )
-        return manual_entry_form(draft)
+        return manual_entry_messages(draft)
     parsed = parse_receipt_text(text, float(CONFIG.get("vat_rate", 0.07)))
     parsed = apply_transaction_type_defaults(parsed, state.get("transaction_type", "Expense"))
     if state.get("category"):
