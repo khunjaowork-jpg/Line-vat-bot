@@ -152,7 +152,7 @@ function saveDocumentImage_(d) {
   if (["image/jpeg","image/png"].indexOf(mimeType) < 0) mimeType = "image/jpeg";
   var ext = mimeType === "image/png" ? ".png" : ".jpg";
   var rawName = String(d.imageFileName || d.image_file_name || ("document-" + Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "yyyyMMdd-HHmmss") + ext));
-  var fileName = rawName.replace(/[\\/:*?"<>|]/g, "_");
+  var fileName = applyDocumentFilePrefix_(rawName, d, "OTH").replace(/[\\/:*?"<>|]/g, "_");
   if (!/\.(jpg|jpeg|png)$/i.test(fileName)) fileName += ext;
   var bytes = Utilities.base64Decode(imageData);
   var folder = getMonthlyFolder_(DOCUMENT_IMAGE_FOLDER, d.date || d.documentDate || new Date());
@@ -166,12 +166,27 @@ function saveSubstitutePdf_(d) {
   var mimeType = "application/pdf";
   var receiptId = d.receiptId || d.receipt_id || ("SUB-" + Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "yyyyMMdd-HHmmss"));
   var rawName = String(d.pdfFileName || d.pdf_file_name || (receiptId + ".pdf"));
-  var fileName = rawName.replace(/[\\/:*?"<>|]/g, "_");
+  var fileName = applyDocumentFilePrefix_(rawName, d, "SUB").replace(/[\\/:*?"<>|]/g, "_");
   if (!/\.pdf$/i.test(fileName)) fileName += ".pdf";
   var bytes = Utilities.base64Decode(pdfData);
   var folder = getMonthlyFolder_(SUBSTITUTE_RECEIPT_FOLDER, d.date || d.documentDate || new Date());
   var file = folder.createFile(Utilities.newBlob(bytes, mimeType, fileName));
   return {fileName: fileName, fileId: file.getId(), folderName: folder.getName()};
+}
+
+function documentFilePrefix_(d, fallback) {
+  var type = String(d.type || d.transaction_type || d.transactionType || "").toLowerCase();
+  if (type === "expense") return "EXP";
+  if (type === "revenue") return "REV";
+  if (String(fallback || "").toUpperCase() === "SUB") return "SUB";
+  return String(fallback || "OTH").toUpperCase();
+}
+
+function applyDocumentFilePrefix_(rawName, d, fallback) {
+  var name = String(rawName || "").trim();
+  var prefix = documentFilePrefix_(d || {}, fallback);
+  if (/^(EXP|REV|SUB|OTH)[-_]/i.test(name)) return name;
+  return prefix + "-" + name;
 }
 
 function appendAccountingDocument(ss, d, type, txRow) {
@@ -434,7 +449,7 @@ function saveMedicalCertificate(ss, p) {
   if (!requestId) throw new Error("missing requestId");
   var bytes = Utilities.base64Decode(String(p.data || ""));
   var mimeType = String(p.mimeType || p.mime_type || "image/jpeg");
-  var fileName = String(p.fileName || p.file_name || (requestId + ".jpg"));
+  var fileName = applyDocumentFilePrefix_(String(p.fileName || p.file_name || (requestId + ".jpg")), {}, "OTH");
   var folder = getOrCreateFolder(HR_MEDICAL_FOLDER);
   var file = folder.createFile(Utilities.newBlob(bytes, mimeType, fileName));
   var request = findHrRequest(ss, requestId);

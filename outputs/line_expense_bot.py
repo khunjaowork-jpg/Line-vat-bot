@@ -1585,14 +1585,14 @@ def confirm_pending_to_google(line_user_id: str, state: dict[str, Any], public_b
             state["pending_data"] = serialize_data(pending)
             set_user_state(line_user_id, state)
             return (
-                format_google_sheet_matches(matches, "เธเธเธฃเธฒเธขเธเธฒเธฃเธขเธญเธ”เธฃเธงเธกเธเนเธณเนเธ Google Sheet") +
-                "\n\nเธฃเธฒเธขเธเธฒเธฃเธเธตเนเน€เธเนเธเธเนเธญเธกเธนเธฅเธ•เธฑเธงเน€เธ”เธตเธขเธงเธเธฑเธเธซเธฃเธทเธญเนเธกเน?\n"
-                "เธ•เธญเธ 1 = เนเธเน เน€เธเนเธเธฃเธฒเธขเธเธฒเธฃเน€เธ”เธตเธขเธงเธเธฑเธ\n"
-                "เธ•เธญเธ 2 = เนเธกเนเนเธเน เธเธฑเธเธ—เธถเธเน€เธเนเธเธฃเธฒเธขเธเธฒเธฃเนเธซเธกเน"
+                format_google_sheet_matches(matches, "พบรายการยอดรวมซ้ำใน Google Sheet") +
+                "\n\nรายการนี้เป็นข้อมูลตัวเดียวกันหรือไม่?\n"
+                "ตอบ 1 = ใช่ เป็นรายการเดียวกัน\n"
+                "ตอบ 2 = ไม่ใช่ บันทึกเป็นรายการใหม่"
             )
     image_path = Path(state.get("image_path", ""))
     if not image_path.exists():
-        return "เนเธกเนเธเธเนเธเธฅเนเธฃเธนเธเน€เธญเธเธชเธฒเธฃเน€เธ”เธดเธกเธเนเธฐ เธเธฃเธธเธ“เธฒเธชเนเธเน€เธญเธเธชเธฒเธฃเนเธซเธกเนเธญเธตเธเธเธฃเธฑเนเธ"
+        return "ไม่พบไฟล์รูปเอกสารเดิมค่ะ กรุณาส่งเอกสารใหม่อีกครั้ง"
     result = None
     try:
         result = send_to_google_sheet(pending, image_path, line_user_id, public_base_url)
@@ -1993,7 +1993,7 @@ def render_substitute_receipt_image(data: dict[str, Any]) -> Path:
 
     out_dir = reply_image_dir()
     out_dir.mkdir(parents=True, exist_ok=True)
-    path = out_dir / f"substitute_receipt_{data.get('row', '-')}_{uuid.uuid4().hex[:8]}.png"
+    path = out_dir / f"SUB-substitute_receipt_{data.get('row', '-')}_{uuid.uuid4().hex[:8]}.png"
     width, height = 1280, 1700
     image = Image.new("RGB", (width, height), "#FFFFFF")
     draw = ImageDraw.Draw(image)
@@ -2404,6 +2404,23 @@ def append_expense_to_excel(image_path: Path, data: dict[str, Any], status: str,
     return append_transaction_to_excel(image_path, data, status, message, line_user_id)
 
 
+def document_file_prefix(data: dict[str, Any], fallback: str = "OTH") -> str:
+    transaction_type = str(data.get("transaction_type") or data.get("type") or "").strip().lower()
+    if transaction_type == "expense":
+        return "EXP"
+    if transaction_type == "revenue":
+        return "REV"
+    return fallback
+
+
+def prefixed_document_file_name(path: Path, data: dict[str, Any], fallback: str = "OTH") -> str:
+    prefix = document_file_prefix(data, fallback)
+    name = path.name if path and path.name else f"document-{dt.datetime.now():%Y%m%d-%H%M%S}.jpg"
+    if re.match(r"^(EXP|REV|SUB|OTH)[-_]", name, flags=re.IGNORECASE):
+        return name
+    return f"{prefix}-{name}"
+
+
 def build_google_sheet_payload(data: dict[str, Any], image_path: Path, line_user_id: str, public_base_url: str, message: str) -> dict[str, Any]:
     before_vat = float(data.get("before_vat") or 0)
     vat_rate = float(CONFIG.get("vat_rate", 0.07))
@@ -2414,7 +2431,7 @@ def build_google_sheet_payload(data: dict[str, Any], image_path: Path, line_user
     image_data = ""
     image_mime_type = ""
     if image_path and image_path.name and public_base_url:
-        image_file_name = image_path.name
+        image_file_name = prefixed_document_file_name(image_path, data, "OTH")
         image_mime_type = mimetypes.guess_type(str(image_path))[0] or "image/jpeg"
         image_data = base64.b64encode(image_path.read_bytes()).decode("ascii")
     date_value = data.get("date") or dt.date.today()
@@ -2715,7 +2732,7 @@ def save_medical_certificate_to_google(request_id: str, image_path: Path, line_u
         "saveMedicalCertificate",
         requestId=request_id,
         lineUserId=line_user_id,
-        fileName=image_path.name,
+        fileName=prefixed_document_file_name(image_path, {"transaction_type": "Other"}, "OTH"),
         mimeType=mime_type,
         data=base64.b64encode(raw).decode("ascii"),
     )
@@ -2737,12 +2754,12 @@ def save_substitute_receipt_to_google(data: dict[str, Any], image_path: Path, pd
         "vat": data.get("vat") or 0,
         "withholdingTax": data.get("withholding_tax") or data.get("withholdingTax") or 0,
         "total": data.get("total") or 0,
-        "imageUrl": image_path.name,
-        "imageFileName": image_path.name,
+        "imageUrl": prefixed_document_file_name(image_path, data, "SUB"),
+        "imageFileName": prefixed_document_file_name(image_path, data, "SUB"),
         "imageMimeType": image_mime_type,
         "imageData": base64.b64encode(image_path.read_bytes()).decode("ascii"),
-        "pdfUrl": pdf_path.name,
-        "pdfFileName": pdf_path.name,
+        "pdfUrl": prefixed_document_file_name(pdf_path, data, "SUB"),
+        "pdfFileName": prefixed_document_file_name(pdf_path, data, "SUB"),
         "pdfMimeType": pdf_mime_type,
         "pdfData": base64.b64encode(pdf_path.read_bytes()).decode("ascii"),
         "lineUserId": line_user_id,
@@ -2765,10 +2782,10 @@ def format_google_sheet_matches(matches: list[dict[str, Any]], heading: str) -> 
         lines.append(
             f"{item.get('sheetName') or 'Sheet'} Row {item.get('row')}: {item.get('date') or '-'} | "
             f"{item.get('type') or '-'} | {item.get('vendor') or '-'} | "
-            f"เน€เธฅเธเธ—เธตเนเธเธดเธฅ {item.get('invoiceNo') or '-'} | "
-            f"เธเนเธญเธ VAT {float(item.get('beforeVat') or 0):,.2f} | "
-            f"เธขเธญเธ”เธฃเธงเธก {float(item.get('total') or 0):,.2f} | "
-            f"เน€เธญเธเธชเธฒเธฃ {item.get('documentType') or '-'}"
+            f"เลขที่บิล {item.get('invoiceNo') or '-'} | "
+            f"ก่อน VAT {float(item.get('beforeVat') or 0):,.2f} | "
+            f"ยอดรวม {float(item.get('total') or 0):,.2f} | "
+            f"เอกสาร {item.get('documentType') or '-'}"
         )
     return "\n".join(lines)
 
@@ -3205,45 +3222,45 @@ def process_line_event_menu(event: dict[str, Any], public_base_url: str) -> str 
                     menu_message(),
                 ]
             return quick_reply_text_message(
-                "เธเธฃเธธเธ“เธฒเน€เธฅเธทเธญเธเธงเนเธฒเธ•เนเธญเธเธเธฒเธฃเธชเธฃเนเธฒเธเนเธเนเธ—เธเธซเธฃเธทเธญเนเธกเนเธเธฐ\n\n"
-                "1 = เธ•เนเธญเธเธเธฒเธฃเธชเธฃเนเธฒเธเนเธเนเธ—เธ\n"
-                "2 = เนเธกเนเธ•เนเธญเธเธเธฒเธฃ",
+                "กรุณาเลือกว่าต้องการสร้างใบแทนหรือไม่คะ\n\n"
+                "1 = ต้องการสร้างใบแทน\n"
+                "2 = ไม่ต้องการ",
                 [
-                    ("๐งพ 1 เธชเธฃเนเธฒเธเนเธเนเธ—เธ", "1"),
-                    ("เนเธกเนเธชเธฃเนเธฒเธเนเธเนเธ—เธ", "2"),
+                    ("1 สร้างใบแทน", "1"),
+                    ("2 ไม่สร้างใบแทน", "2"),
                 ],
             )
         if state.get("mode") == "awaiting_substitute_select":
             row_match = re.match(r"^(?:row\s*)?(\d+)$", text, flags=re.IGNORECASE)
             if not row_match:
-                return "เธเธฃเธธเธ“เธฒเธเธดเธกเธเนเน€เธฅเธ Row เธ—เธตเนเธ•เนเธญเธเธเธฒเธฃเธชเธฃเนเธฒเธเนเธเนเธ—เธ เน€เธเนเธ Row 12"
+                return "กรุณาพิมพ์เลข Row ที่ต้องการสร้างใบแทน เช่น Row 12"
             wanted_row = int(row_match.group(1))
             matches = [item for item in state.get("substitute_matches", []) if int(item.get("row", 0)) == wanted_row]
             if not matches:
-                return "เนเธกเนเธเธ Row เธเธตเนเธเธฒเธเธฃเธฒเธขเธเธฒเธฃเธ—เธตเนเธเนเธเธซเธฒ เธเธฃเธธเธ“เธฒเธเธดเธกเธเน Row เนเธซเธกเนเธเนเธฐ"
+                return "ไม่พบ Row นี้จากรายการที่ค้นหา กรุณาพิมพ์ Row ใหม่ค่ะ"
             clear_user_state(line_user_id)
             return substitute_receipt_messages(matches, public_base_url, line_user_id)
         substitute_match = re.match(r"^เนเธเนเธ—เธ\s+(.+)$", text, flags=re.IGNORECASE)
         if substitute_match:
             amount = normalize_amount(substitute_match.group(1))
             if amount is None:
-                return "เธเธฃเธธเธ“เธฒเธเธดเธกเธเนเธเธณเธชเธฑเนเธ เน€เธเนเธ เนเธเนเธ—เธ 59 เธซเธฃเธทเธญ เนเธเนเธ—เธ 12705.18"
+                return "กรุณาพิมพ์คำสั่ง เช่น ใบแทน 59 หรือ ใบแทน 12705.18"
             try:
                 matches = search_google_sheet_by_total(amount)
             except Exception as exc:
                 runtime_log(f"Substitute receipt search failed: {exc}")
                 clear_user_state(line_user_id)
-                return abort_flow_message(f"เธเนเธเธซเธฒเธฃเธฒเธขเธเธฒเธฃเน€เธเธทเนเธญเธชเธฃเนเธฒเธเนเธเนเธ—เธเนเธกเนเธชเธณเน€เธฃเนเธเธเนเธฐ ({exc})")
+                return abort_flow_message(f"ค้นหารายการเพื่อสร้างใบแทนไม่สำเร็จค่ะ ({exc})")
             matches = [item for item in matches if can_create_substitute_receipt(item)]
             if not matches:
                 return (
-                    f"เนเธกเนเธเธเธฃเธฒเธขเธเธฒเธฃเธเนเธฒเนเธเนเธเนเธฒเธขเธขเธญเธ” {amount:,.2f} เธ—เธตเนเธชเธฒเธกเธฒเธฃเธ–เธชเธฃเนเธฒเธเนเธเนเธ—เธเนเธ”เนเธเนเธฐ\n"
-                    "เธ•เธฃเธงเธเธชเธญเธเธงเนเธฒเธขเธญเธ”เธ•เธฃเธเธเธฑเธ Google Sheet เธซเธฃเธทเธญเธเธดเธกเธเนเธขเธญเธ”เธฃเธงเธกเธชเธธเธ—เธเธดเธเธญเธเธฃเธฒเธขเธเธฒเธฃเธเธฑเนเธเธญเธตเธเธเธฃเธฑเนเธ"
+                    f"ไม่พบรายการค่าใช้จ่ายยอด {amount:,.2f} ที่สามารถสร้างใบแทนได้ค่ะ\n"
+                    "ตรวจสอบว่ายอดตรงกับ Google Sheet หรือพิมพ์ยอดรวมสุทธิของรายการนั้นอีกครั้ง"
                 )
             if len(matches) == 1:
                 return substitute_receipt_messages(matches, public_base_url, line_user_id)
             set_user_state(line_user_id, {"mode": "awaiting_substitute_select", "substitute_matches": matches[:10]})
-            return format_google_sheet_matches(matches, "เธเธเธซเธฅเธฒเธขเธฃเธฒเธขเธเธฒเธฃเธ—เธตเนเธชเธฒเธกเธฒเธฃเธ–เธชเธฃเนเธฒเธเนเธเนเธ—เธเนเธ”เน") + "\n\nเธเธฃเธธเธ“เธฒเธเธดเธกเธเนเน€เธฅเธ Row เธ—เธตเนเธ•เนเธญเธเธเธฒเธฃเธชเธฃเนเธฒเธเนเธเนเธ—เธ"
+            return format_google_sheet_matches(matches, "พบหลายรายการที่สามารถสร้างใบแทนได้") + "\n\nกรุณาพิมพ์เลข Row ที่ต้องการสร้างใบแทน"
         if state.get("mode") == "awaiting_confirmation" and text in {"1", "เธ•เธฃเธงเธเธชเธญเธเนเธฅเธฐเธขเธทเธเธขเธฑเธ"}:
             if not state.get("pending_data"):
                 return "เธขเธฑเธเนเธกเนเธกเธตเธเธดเธฅเธ—เธตเนเธฃเธญเธขเธทเธเธขเธฑเธเธเนเธฐ เธเธฃเธธเธ“เธฒเน€เธฅเธทเธญเธเน€เธกเธเธน เธเธดเธฅเธฃเธฒเธขเธฃเธฑเธ เธซเธฃเธทเธญ เธเธดเธฅเธฃเธฒเธขเธเนเธฒเธข เธเนเธญเธ"
@@ -3273,24 +3290,24 @@ def process_line_event_menu(event: dict[str, Any], public_base_url: str) -> str 
                 state["cancel_row"] = int(matches[0]["row"])
                 state["cancel_sheet"] = str(matches[0].get("sheetName") or "")
                 set_user_state(line_user_id, state)
-                return format_google_sheet_matches(matches, "เธเธเธฃเธฒเธขเธเธฒเธฃเธ—เธตเนเธ•เนเธญเธเธเธฒเธฃเธขเธเน€เธฅเธดเธ") + "\n\nเธ•เธญเธ 1 = เธขเธทเธเธขเธฑเธเธขเธเน€เธฅเธดเธ\nเธ•เธญเธ 2 = เนเธกเนเธขเธเน€เธฅเธดเธ"
+                return format_google_sheet_matches(matches, "พบรายการที่ต้องการยกเลิก") + "\n\nตอบ 1 = ยืนยันยกเลิก\nตอบ 2 = ไม่ยกเลิก"
             state["mode"] = "awaiting_cancel_select"
             state["cancel_matches"] = matches[:10]
             set_user_state(line_user_id, state)
-            return format_google_sheet_matches(matches, "เธเธเธซเธฅเธฒเธขเธฃเธฒเธขเธเธฒเธฃเธ—เธตเนเธกเธตเธขเธญเธ”เธฃเธงเธกเธเธตเน") + "\n\nเธเธฃเธธเธ“เธฒเธเธดเธกเธเนเน€เธฅเธ Row เธ—เธตเนเธ•เนเธญเธเธเธฒเธฃเธขเธเน€เธฅเธดเธ"
+            return format_google_sheet_matches(matches, "พบหลายรายการที่มียอดรวมนี้") + "\n\nกรุณาพิมพ์เลข Row ที่ต้องการยกเลิก"
         if state.get("mode") == "awaiting_cancel_select":
             row_match = re.match(r"^(?:row\s*)?(\d+)$", text, flags=re.IGNORECASE)
             if not row_match:
-                return "เธเธฃเธธเธ“เธฒเธเธดเธกเธเนเน€เธฅเธ Row เธ—เธตเนเธ•เนเธญเธเธเธฒเธฃเธขเธเน€เธฅเธดเธ เน€เธเนเธ Row 12"
+                return "กรุณาพิมพ์เลข Row ที่ต้องการยกเลิก เช่น Row 12"
             wanted_row = int(row_match.group(1))
             matches = [item for item in state.get("cancel_matches", []) if int(item.get("row", 0)) == wanted_row]
             if not matches:
-                return "เนเธกเนเธเธ Row เธเธตเนเธเธฒเธเธฃเธฒเธขเธเธฒเธฃเธ—เธตเนเธเนเธเธซเธฒ เธเธฃเธธเธ“เธฒเธเธดเธกเธเน Row เนเธซเธกเนเธเนเธฐ"
+                return "ไม่พบ Row นี้จากรายการที่ค้นหา กรุณาพิมพ์ Row ใหม่ค่ะ"
             state["mode"] = "awaiting_cancel_confirm"
             state["cancel_row"] = wanted_row
             state["cancel_sheet"] = str(matches[0].get("sheetName") or "")
             set_user_state(line_user_id, state)
-            return format_google_sheet_matches(matches, "เธขเธทเธเธขเธฑเธเธฃเธฒเธขเธเธฒเธฃเธ—เธตเนเธ•เนเธญเธเธเธฒเธฃเธขเธเน€เธฅเธดเธ") + "\n\nเธ•เธญเธ 1 = เธขเธทเธเธขเธฑเธเธขเธเน€เธฅเธดเธ\nเธ•เธญเธ 2 = เนเธกเนเธขเธเน€เธฅเธดเธ"
+            return format_google_sheet_matches(matches, "ยืนยันรายการที่ต้องการยกเลิก") + "\n\nตอบ 1 = ยืนยันยกเลิก\nตอบ 2 = ไม่ยกเลิก"
         if state.get("mode") == "awaiting_cancel_confirm":
             if text == "1":
                 row = int(state.get("cancel_row", 0))
@@ -3299,45 +3316,45 @@ def process_line_event_menu(event: dict[str, Any], public_base_url: str) -> str 
                 except Exception as exc:
                     runtime_log(f"Cancel delete failed: {exc}")
                     clear_user_state(line_user_id)
-                    return abort_flow_message(f"เธขเธเน€เธฅเธดเธเธฃเธฒเธขเธเธฒเธฃเนเธกเนเธชเธณเน€เธฃเนเธเธเนเธฐ ({exc})")
+                    return abort_flow_message(f"ยกเลิกรายการไม่สำเร็จค่ะ ({exc})")
                 clear_user_state(line_user_id)
-                return "เธขเธเน€เธฅเธดเธเธเธดเธฅเน€เธฃเธตเธขเธเธฃเนเธญเธข"
+                return "ยกเลิกบิลเรียบร้อย"
             if text == "2":
                 clear_user_state(line_user_id)
-                return "เธขเธเน€เธฅเธดเธเธเธณเธชเธฑเนเธเนเธฅเนเธงเธเนเธฐ"
-            return "เธเธฃเธธเธ“เธฒเธ•เธญเธ 1 เน€เธเธทเนเธญเธขเธทเธเธขเธฑเธเธขเธเน€เธฅเธดเธ เธซเธฃเธทเธญ 2 เน€เธเธทเนเธญเนเธกเนเธขเธเน€เธฅเธดเธ"
+                return "ยกเลิกคำสั่งแล้วค่ะ"
+            return "กรุณาตอบ 1 เพื่อยืนยันยกเลิก หรือ 2 เพื่อไม่ยกเลิก"
         if state.get("mode") == "awaiting_duplicate_confirmation":
             if text == "1":
                 state["mode"] = "awaiting_duplicate_edit_choice"
                 set_user_state(line_user_id, state)
-                return "เธ•เนเธญเธเธเธฒเธฃเนเธเนเนเธเธเธฃเธฐเน€เธ เธ—เน€เธญเธเธชเธฒเธฃเธเธญเธเธฃเธฒเธขเธเธฒเธฃเน€เธ”เธดเธกเธซเธฃเธทเธญเนเธกเน?\nเธ•เธญเธ 1 = เนเธเนเนเธเธเธฃเธฐเน€เธ เธ—เน€เธญเธเธชเธฒเธฃ\nเธ•เธญเธ 2 = เนเธกเนเนเธเนเนเธเนเธฅเธฐเนเธกเนเธเธฑเธเธ—เธถเธเธเนเธณ"
+                return "ต้องการแก้ไขประเภทเอกสารของรายการเดิมหรือไม่?\nตอบ 1 = แก้ไขประเภทเอกสาร\nตอบ 2 = ไม่แก้ไขและไม่บันทึกซ้ำ"
             if text == "2":
                 state["mode"] = "awaiting_confirmation"
                 state["duplicate_checked"] = True
                 set_user_state(line_user_id, state)
                 return confirm_pending_to_google(line_user_id, state, public_base_url)
-            return "เธเธฃเธธเธ“เธฒเธ•เธญเธ 1 = เน€เธเนเธเธฃเธฒเธขเธเธฒเธฃเน€เธ”เธตเธขเธงเธเธฑเธ เธซเธฃเธทเธญ 2 = เธเธฑเธเธ—เธถเธเน€เธเนเธเธฃเธฒเธขเธเธฒเธฃเนเธซเธกเน"
+            return "กรุณาตอบ 1 = เป็นรายการเดียวกัน หรือ 2 = บันทึกเป็นรายการใหม่"
         if state.get("mode") == "awaiting_duplicate_edit_choice":
             if text == "1":
                 state["mode"] = "awaiting_duplicate_doc_type"
                 set_user_state(line_user_id, state)
-                return "เธเธฃเธธเธ“เธฒเธเธดเธกเธเนเธเธฃเธฐเน€เธ เธ—เน€เธญเธเธชเธฒเธฃเนเธซเธกเนเธ—เธตเนเธ•เนเธญเธเธเธฒเธฃเนเธเนเนเธ เน€เธเนเธ เนเธเธเธณเธเธฑเธเธ เธฒเธฉเธต / เนเธเน€เธชเธฃเนเธ / เธเธดเธฅ"
+                return "กรุณาพิมพ์ประเภทเอกสารใหม่ที่ต้องการแก้ไข เช่น ใบกำกับภาษี / ใบเสร็จ / บิล"
             if text == "2":
                 clear_user_state(line_user_id)
-                return "เธขเธเน€เธฅเธดเธเธเธฒเธฃเธเธฑเธเธ—เธถเธเธเนเธณเนเธฅเนเธงเธเนเธฐ"
-            return "เธเธฃเธธเธ“เธฒเธ•เธญเธ 1 เน€เธเธทเนเธญเนเธเนเนเธเธเธฃเธฐเน€เธ เธ—เน€เธญเธเธชเธฒเธฃ เธซเธฃเธทเธญ 2 เน€เธเธทเนเธญเนเธกเนเนเธเนเนเธ"
+                return "ยกเลิกการบันทึกซ้ำแล้วค่ะ"
+            return "กรุณาตอบ 1 เพื่อแก้ไขประเภทเอกสาร หรือ 2 เพื่อไม่แก้ไข"
         if state.get("mode") == "awaiting_duplicate_doc_type":
             state["new_document_type"] = text
             state["mode"] = "awaiting_duplicate_update_confirm"
             set_user_state(line_user_id, state)
             matches = state.get("duplicate_matches", [])
-            return format_google_sheet_matches(matches, "เธฃเธฒเธขเธเธฒเธฃเน€เธ”เธดเธกเธ—เธตเนเธเธฐเธ–เธนเธเนเธเนเนเธ") + f"\n\nเธเธฃเธฐเน€เธ เธ—เน€เธญเธเธชเธฒเธฃเนเธซเธกเน: {text}\nเธ•เธญเธ 1 = เธขเธทเธเธขเธฑเธเนเธเนเนเธ\nเธ•เธญเธ 2 = เนเธเนเนเธเธเธฃเธฐเน€เธ เธ—เน€เธญเธเธชเธฒเธฃเธญเธตเธเธเธฃเธฑเนเธ"
+            return format_google_sheet_matches(matches, "รายการเดิมที่จะถูกแก้ไข") + f"\n\nประเภทเอกสารใหม่: {text}\nตอบ 1 = ยืนยันแก้ไข\nตอบ 2 = แก้ไขประเภทเอกสารอีกครั้ง"
         if state.get("mode") == "awaiting_duplicate_update_confirm":
             if text == "1":
                 matches = state.get("duplicate_matches", [])
                 if not matches:
                     clear_user_state(line_user_id)
-                    return "เนเธกเนเธเธเธฃเธฒเธขเธเธฒเธฃเน€เธ”เธดเธกเธชเธณเธซเธฃเธฑเธเนเธเนเนเธเธเนเธฐ"
+                    return "ไม่พบรายการเดิมสำหรับแก้ไขค่ะ"
                 target = matches[0]
                 row = int(target["row"])
                 sheet_name = str(target.get("sheetName") or "")
@@ -3347,14 +3364,14 @@ def process_line_event_menu(event: dict[str, Any], public_base_url: str) -> str 
                 except Exception as exc:
                     runtime_log(f"Duplicate doc type update failed: {exc}")
                     clear_user_state(line_user_id)
-                    return abort_flow_message(f"เนเธเนเนเธเธเธฃเธฐเน€เธ เธ—เน€เธญเธเธชเธฒเธฃเนเธกเนเธชเธณเน€เธฃเนเธเธเนเธฐ ({exc})")
+                    return abort_flow_message(f"แก้ไขประเภทเอกสารไม่สำเร็จค่ะ ({exc})")
                 clear_user_state(line_user_id)
-                return "เนเธเนเนเธเธเธฃเธฐเน€เธ เธ—เน€เธญเธเธชเธฒเธฃเน€เธฃเธตเธขเธเธฃเนเธญเธข"
+                return "แก้ไขประเภทเอกสารเรียบร้อย"
             if text == "2":
                 state["mode"] = "awaiting_duplicate_doc_type"
                 set_user_state(line_user_id, state)
-                return "เธเธฃเธธเธ“เธฒเธเธดเธกเธเนเธเธฃเธฐเน€เธ เธ—เน€เธญเธเธชเธฒเธฃเนเธซเธกเนเธญเธตเธเธเธฃเธฑเนเธเธเนเธฐ"
-            return "เธเธฃเธธเธ“เธฒเธ•เธญเธ 1 เน€เธเธทเนเธญเธขเธทเธเธขเธฑเธเนเธเนเนเธ เธซเธฃเธทเธญ 2 เน€เธเธทเนเธญเนเธเนเนเธเธเธฃเธฐเน€เธ เธ—เน€เธญเธเธชเธฒเธฃเธญเธตเธเธเธฃเธฑเนเธ"
+                return "กรุณาพิมพ์ประเภทเอกสารใหม่อีกครั้งค่ะ"
+            return "กรุณาตอบ 1 เพื่อยืนยันแก้ไข หรือ 2 เพื่อแก้ไขประเภทเอกสารอีกครั้ง"
         if state.get("mode") == "awaiting_confirmation" and text in {"2", "เนเธเนเนเธ"}:
             if not state.get("pending_data"):
                 return "เธขเธฑเธเนเธกเนเธกเธตเธเธดเธฅเธ—เธตเนเธฃเธญเนเธเนเนเธเธเนเธฐ"
