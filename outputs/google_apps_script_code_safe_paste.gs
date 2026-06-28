@@ -26,11 +26,13 @@ function doGet() {
 }
 
 function authorizeDriveAccess() {
-  var folder = getOrCreateFolder(HR_MEDICAL_FOLDER);
   var scheduleFolder = getOrCreateFolder(HR_SCHEDULE_PDF_FOLDER);
   var accountingFolder = getMonthlyFolder_(DOCUMENT_IMAGE_FOLDER, new Date());
-  var substituteFolder = getMonthlyFolder_(SUBSTITUTE_RECEIPT_FOLDER, new Date());
-  return "Drive permission ready: " + folder.getName() + ", " + scheduleFolder.getName() + ", " + accountingFolder.getName() + ", " + substituteFolder.getName();
+  var expFolder = getDocumentStorageFolder_("EXP-permission-check.jpg", new Date());
+  var subFolder = getDocumentStorageFolder_("SUB-permission-check.pdf", new Date());
+  var revFolder = getDocumentStorageFolder_("REV-permission-check.jpg", new Date());
+  var othFolder = getDocumentStorageFolder_("OTH-permission-check.jpg", new Date());
+  return "Drive permission ready: " + scheduleFolder.getName() + ", " + accountingFolder.getName() + ", " + expFolder.getName() + ", " + subFolder.getName() + ", " + revFolder.getName() + ", " + othFolder.getName();
 }
 
 function doPost(e) {
@@ -155,7 +157,7 @@ function saveDocumentImage_(d) {
   var fileName = applyDocumentFilePrefix_(rawName, d, "OTH").replace(/[\\/:*?"<>|]/g, "_");
   if (!/\.(jpg|jpeg|png)$/i.test(fileName)) fileName += ext;
   var bytes = Utilities.base64Decode(imageData);
-  var folder = getMonthlyFolder_(DOCUMENT_IMAGE_FOLDER, d.date || d.documentDate || new Date());
+  var folder = getDocumentStorageFolder_(fileName, d.date || d.documentDate || new Date());
   var file = folder.createFile(Utilities.newBlob(bytes, mimeType, fileName));
   return {fileName: fileName, fileId: file.getId(), folderName: folder.getName()};
 }
@@ -169,7 +171,7 @@ function saveSubstitutePdf_(d) {
   var fileName = applyDocumentFilePrefix_(rawName, d, "SUB").replace(/[\\/:*?"<>|]/g, "_");
   if (!/\.pdf$/i.test(fileName)) fileName += ".pdf";
   var bytes = Utilities.base64Decode(pdfData);
-  var folder = getMonthlyFolder_(SUBSTITUTE_RECEIPT_FOLDER, d.date || d.documentDate || new Date());
+  var folder = getDocumentStorageFolder_(fileName, d.date || d.documentDate || new Date());
   var file = folder.createFile(Utilities.newBlob(bytes, mimeType, fileName));
   return {fileName: fileName, fileId: file.getId(), folderName: folder.getName()};
 }
@@ -187,6 +189,21 @@ function applyDocumentFilePrefix_(rawName, d, fallback) {
   var prefix = documentFilePrefix_(d || {}, fallback);
   if (/^(EXP|REV|SUB|OTH)[-_]/i.test(name)) return name;
   return prefix + "-" + name;
+}
+
+function getDocumentStorageFolder_(fileName, dateValue) {
+  var monthlyFolder = getMonthlyFolder_(DOCUMENT_IMAGE_FOLDER, dateValue);
+  var prefix = String(fileName || "").split(/[-_]/)[0].toUpperCase();
+  if (prefix === "EXP") {
+    return getOrCreateChildFolder_(getOrCreateChildFolder_(monthlyFolder, "Expenses"), "EXP");
+  }
+  if (prefix === "SUB") {
+    return getOrCreateChildFolder_(getOrCreateChildFolder_(monthlyFolder, "Expenses"), "SUB");
+  }
+  if (prefix === "REV") {
+    return getOrCreateChildFolder_(getOrCreateChildFolder_(monthlyFolder, "Revenue"), "REV");
+  }
+  return getOrCreateChildFolder_(getOrCreateChildFolder_(monthlyFolder, "Others"), "OTH");
 }
 
 function appendAccountingDocument(ss, d, type, txRow) {
@@ -450,9 +467,9 @@ function saveMedicalCertificate(ss, p) {
   var bytes = Utilities.base64Decode(String(p.data || ""));
   var mimeType = String(p.mimeType || p.mime_type || "image/jpeg");
   var fileName = applyDocumentFilePrefix_(String(p.fileName || p.file_name || (requestId + ".jpg")), {}, "OTH");
-  var folder = getOrCreateFolder(HR_MEDICAL_FOLDER);
-  var file = folder.createFile(Utilities.newBlob(bytes, mimeType, fileName));
   var request = findHrRequest(ss, requestId);
+  var folder = getDocumentStorageFolder_(fileName, request.startDate || new Date());
+  var file = folder.createFile(Utilities.newBlob(bytes, mimeType, fileName));
   var sh = ss.getSheetByName(HR_MED);
   sh.appendRow([
     requestId,
