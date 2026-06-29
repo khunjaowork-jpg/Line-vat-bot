@@ -1596,7 +1596,8 @@ def confirm_pending_to_google(line_user_id: str, state: dict[str, Any], public_b
                 format_google_sheet_matches(matches, "พบรายการยอดรวมซ้ำใน Google Sheet") +
                 "\n\nรายการนี้เป็นข้อมูลตัวเดียวกันหรือไม่?\n"
                 "ตอบ 1 = ใช่ เป็นรายการเดียวกัน\n"
-                "ตอบ 2 = ไม่ใช่ บันทึกเป็นรายการใหม่"
+                "ตอบ 2 = ไม่ใช่ บันทึกเป็นรายการใหม่\n"
+                "ตอบ 3 = ยกเลิกรายการเดิมก่อนบันทึก"
             )
     image_path = Path(state.get("image_path", ""))
     if not image_path.exists():
@@ -3341,7 +3342,80 @@ def process_line_event_menu(event: dict[str, Any], public_base_url: str) -> str 
                 state["duplicate_checked"] = True
                 set_user_state(line_user_id, state)
                 return confirm_pending_to_google(line_user_id, state, public_base_url)
-            return "กรุณาตอบ 1 = เป็นรายการเดียวกัน หรือ 2 = บันทึกเป็นรายการใหม่"
+            if text == "3":
+                state["mode"] = "awaiting_duplicate_cancel_row"
+                set_user_state(line_user_id, state)
+                return (
+                    format_google_sheet_matches(state.get("duplicate_matches", []), "เลือกรายการเดิมที่ต้องการยกเลิก") +
+                    "\n\nกรุณาพิมพ์ยอดและ Row ที่ต้องการยกเลิก เช่น\n"
+                    "12705.18 Row 5\n"
+                    "หรือพิมพ์ Row 5 หากยอดตรงกับรายการที่แสดงค่ะ"
+                )
+            return "กรุณาตอบ 1 = เป็นรายการเดียวกัน, 2 = บันทึกเป็นรายการใหม่ หรือ 3 = ยกเลิกรายการเดิมก่อนบันทึก"
+        if state.get("mode") == "awaiting_duplicate_cancel_row":
+            row_match = re.search(r"(?:row\s*)?(\d+)", text, flags=re.IGNORECASE)
+            if not row_match:
+                return "กรุณาพิมพ์ยอดและ Row ที่ต้องการยกเลิก เช่น 12705.18 Row 5"
+            wanted_row = int(row_match.group(1))
+            amount = normalize_amount(text)
+            matches = [item for item in state.get("duplicate_matches", []) if int(item.get("row", 0)) == wanted_row]
+            if not matches:
+                return "ไม่พบ Row นี้จากรายการยอดซ้ำที่แสดงค่ะ กรุณาพิมพ์ Row ใหม่อีกครั้ง"
+            target = matches[0]
+            if amount is not None:
+                target_amounts = [
+                    round(float(target.get("total") or 0), 2),
+                    round(float(target.get("beforeVat") or 0), 2),
+                ]
+                if round(float(amount), 2) not in target_amounts:
+                    return (
+                        f"ยอด {amount:,.2f} ไม่ตรงกับ Row {wanted_row} ค่ะ\n"
+                        "กรุณาตรวจสอบยอดและ Row แล้วส่งใหม่อีกครั้ง"
+                    )
+            state["mode"] = "awaiting_duplicate_cancel_confirm"
+            state["duplicate_cancel_row"] = wanted_row
+            state["duplicate_cancel_sheet"] = str(target.get("sheetName") or "")
+            set_user_state(line_user_id, state)
+            return (
+                format_google_sheet_matches(matches, "ยืนยันรายการเดิมที่ต้องการยกเลิก") +
+                "\n\nตอบ 1 = ยืนยันยกเลิกรายการนี้\n"
+                "ตอบ 2 = ไม่ยกเลิก กลับไปตรวจรายการซ้ำ"
+            )
+        if state.get("mode") == "awaiting_duplicate_cancel_confirm":
+            if text == "1":
+                row = int(state.get("duplicate_cancel_row", 0))
+                sheet_name = str(state.get("duplicate_cancel_sheet") or "")
+                try:
+                    delete_google_sheet_row(row, sheet_name)
+                except Exception as exc:
+                    runtime_log(f"Duplicate cancel delete failed: {exc}")
+                    clear_user_state(line_user_id)
+                    return abort_flow_message(f"ยกเลิกรายการเดิมไม่สำเร็จค่ะ ({exc})")
+                pending = deserialize_data(state.get("pending_data", {}))
+                new_state = {
+                    "mode": "awaiting_confirmation",
+                    "transaction_type": state.get("transaction_type") or pending.get("transaction_type") or "Expense",
+                    "image_path": state.get("image_path") or "",
+                    "document_paths": state.get("document_paths") or [],
+                    "pending_data": serialize_data(pending),
+                    "duplicate_checked": True,
+                }
+                set_user_state(line_user_id, new_state)
+                confirm_messages = confirmation_prompt(pending)
+                return [text_message("ยกเลิกรายการเดิมเรียบร้อยค่ะ\nกรุณาตรวจสอบและยืนยันการบันทึกรายการใหม่นี้อีกครั้ง")] + (
+                    confirm_messages if isinstance(confirm_messages, list) else [text_message(str(confirm_messages))]
+                )
+            if text == "2":
+                state["mode"] = "awaiting_duplicate_confirmation"
+                set_user_state(line_user_id, state)
+                return (
+                    format_google_sheet_matches(state.get("duplicate_matches", []), "พบรายการยอดรวมซ้ำใน Google Sheet") +
+                    "\n\nรายการนี้เป็นข้อมูลตัวเดียวกันหรือไม่?\n"
+                    "ตอบ 1 = ใช่ เป็นรายการเดียวกัน\n"
+                    "ตอบ 2 = ไม่ใช่ บันทึกเป็นรายการใหม่\n"
+                    "ตอบ 3 = ยกเลิกรายการเดิมก่อนบันทึก"
+                )
+            return "กรุณาตอบ 1 เพื่อยืนยันยกเลิก หรือ 2 เพื่อกลับไปตรวจรายการซ้ำ"
         if state.get("mode") == "awaiting_duplicate_edit_choice":
             if text == "1":
                 state["mode"] = "awaiting_duplicate_doc_type"
